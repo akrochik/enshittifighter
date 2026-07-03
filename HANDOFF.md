@@ -8,7 +8,7 @@ A browser extension that fixes Facebook Marketplace's broken search. Hand this d
 
 Facebook Marketplace search is loose (a search for "silverado 2500" returns Colorado Z71s, F-250s, an Impala, a Tundra) and its sort is useless (sorting by price within a price band returns a wall of identically-priced listings with no secondary tiebreak). This extension fixes both — **client-side, on the data the user's own browser already fetches.**
 
-The extension intercepts the GraphQL responses Facebook sends to the user's own logged-in browser as they browse Marketplace, maps them into a clean internal shape, and renders them in an injected sidebar with real filters, a real multi-key sort, and saved searches. It does **not** fetch anything from Facebook itself — it only re-processes what the user's own scrolling loads.
+The extension intercepts the GraphQL responses Facebook sends to the user's own logged-in browser as they browse Marketplace, maps them into a clean internal shape, and renders them in an injected sidebar with real filters, a real multi-key sort, and saved searches. For the *search feed* it fetches nothing — it only re-processes what the user's own scrolling loads. It makes one bounded exception: to read structured vehicle fields (fuel type, transmission, exact mileage, …) that exist only on a listing's detail page, it fetches that detail page — but only for listings already in the user-surfaced pool, once each, throttled (see §2, rule 1).
 
 **Scope:** personal use + sharing with friends via an *unlisted* Chrome Web Store listing. This is a small, sharp tool, not a product. Do not add product-scale features (accounts, telemetry, backends, monetization).
 
@@ -20,7 +20,7 @@ The extension intercepts the GraphQL responses Facebook sends to the user's own 
 
 These override any default an implementer would otherwise reach for. If a step seems to require violating one of these, stop and flag it rather than working around it.
 
-1. **PASSIVE ONLY — this is the most important rule.** The extension must NEVER originate automated requests to Facebook. No query fan-out / parallel searches, no auto-scroll, no programmatic triggering of searches, no replaying or forging GraphQL requests. It reads only the responses that the user's own manual actions cause Facebook to send. This is a permanent safety/legal boundary, not a v1-scope shortcut. Originating automated traffic is what flags users' Facebook accounts and creates real exposure; passive re-processing generates zero network signal and is the entire basis for this tool being safe to distribute.
+1. **PASSIVE DISCOVERY, BOUNDED ENRICHMENT — the most important rule.** *Discovery* is passive: the extension must NEVER auto-search, auto-scroll, fan out queries, or replay/forge search requests — the listing pool is built only from responses the user's own manual browsing causes. *Enrichment* is active but tightly bounded: the extension MAY fetch a listing's detail page (`MarketplacePDPContainerQuery`) to read structured vehicle fields (fuel type, transmission, odometer, title status, seller type, colors), but ONLY for listings already in the user-surfaced pool, at most once each, throttled. It never crawls beyond the surfaced pool and never fabricates searches. No anti-detection (throttle for politeness only; no fingerprint spoofing or human-timing mimicry). This relaxes the original passive-only boundary on purpose: pool-wide filtering on those detail-only fields is the tool's core value. Trade-off: enrichment fetches break Meta ToS §3.2 (automated collection even while logged-in), so distribution defaults to personal-use until the sharing question (§9) is decided; account-action risk for this low-volume own-session pattern is low but unquantified (research dated 2026-07-03). If a task needs automated *discovery*, crawling past the surfaced pool, or evasion — STOP and flag it.
 
 2. **No backend.** Everything runs client-side inside the extension. No server, no proxy, no hosted component (except a static privacy-policy page).
 
@@ -189,7 +189,9 @@ The fixture-based core is the unlock: because Claude Code cannot log into Facebo
 
 ---
 
-## 9. Distribution (reference — already decided)
+## 9. Distribution (REVISED — under review after the enrichment change)
+
+> **Open decision.** The active-enrichment layer (§2, rule 1) breaks Meta's ToS, which undercuts the original "publish an unlisted Web Store extension and share with friends" plan — publishing a ToS-violating auto-fetcher risks Web Store rejection and spreads the (low-but-unquantified) account risk to everyone who installs it. **Default posture is now personal-use via load-unpacked.** Whether to still publish/share is deferred to Phase 5; the bullets below are the *original* plan, retained for reference but no longer "already decided."
 
 - **Unlisted Chrome Web Store listing.** Not in store search; installs via a shared link with normal one-click install + auto-updates. Share the link in the Discord.
 - **Dedicated Google developer account**, kept separate from the user's personal identity and any Facebook accounts. One-time $5 registration.

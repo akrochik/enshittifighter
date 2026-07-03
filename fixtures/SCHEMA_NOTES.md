@@ -170,3 +170,51 @@ Later lines = `@defer`/`$stream` increments: `{label, path, data, extensions}` w
 4. **Sponsored units carry no listing** here (`product_item: null`) — skip-and-tally.
 5. Consider adding `sponsored: boolean` and optionally `previousPrice`/`mileageFromSubtitle`
    to `Listing` — small, justified by real data.
+
+---
+
+## 8. Detail-page (PDP) enrichment schema — structured vehicle fields
+
+The search feed has **no** engine/transmission/drivetrain. Those live on the **listing
+detail page**, returned by `MarketplacePDPContainerQuery` when the user opens
+`/marketplace/item/{id}`. The enrichment layer (CLAUDE rule / HANDOFF §2.1) fetches this
+per pooled listing, throttled, to fill structured vehicle fields.
+
+**Path to the vehicle object:**
+```
+data.viewer.marketplace_product_details_page.target   // richer GroupCommerceProductItem than the feed node
+```
+
+**Structured `vehicle_*` fields** — verified across `pdp-vehicle-1.json` (2013 F150) and
+`pdp-vehicle-2.json` (1995 F150):
+
+| field | type / values | populated | → `Listing`/filter |
+|---|---|---|---|
+| `vehicle_fuel_type` | enum `GASOLINE`/`DIESEL`/`HYBRID`/`ELECTRIC`/… | both ✅ | **fuel filter** |
+| `vehicle_transmission_type` | enum `AUTOMATIC`/`MANUAL` | both ✅ | **transmission filter** (was 0% in titles) |
+| `vehicle_odometer_data` | `{unit:"MILES", value:170000}` | both ✅ | exact `mileage` (overrides subtitle estimate) |
+| `vehicle_make_display_name` / `vehicle_model_display_name` | strings ("Ford" / "F150 SuperCrew Cab") | both ✅ | authoritative make/model (beats title parse) |
+| `vehicle_trim_display_name` | string ("FX4 Pickup 4D 5 1/2 ft") | both ✅ | `trim` |
+| `vehicle_seller_type` | enum `PRIVATE_SELLER`/`DEALER` | both ✅ | **dealer-vs-private filter** |
+| `vehicle_exterior_color` / `vehicle_interior_color` | strings ("blue"/"tan") | ext ✅, int spotty | **exterior-color filter** |
+| `vehicle_title_status` | enum `CLEAN`/`SALVAGE`/… or `null` | 1 of 2 | **clean-title filter** (seller-optional) |
+| `vehicle_number_of_owners` | enum `ONE`/`TWO`/… or `null` | 1 of 2 | display (seller-optional) |
+| `vehicle_condition` | enum or `null` | 0 of 2 | seller rarely fills |
+| `vehicle_identification_number` (VIN) | string or `null` | 0 of 2 | seller rarely fills |
+| `vehicle_is_paid_off` | `IS_PAID_OFF`/`null` | 1 of 2 | display |
+| `vehicle_specifications` | `{engine_size, horse_power, gas_mileage_city/highway/combined{value,units}, co2_emissions}` | MPG/HP partial | display |
+| `vehicle_features` | array (options) | `[]` both | display when present |
+
+**NOT available even here:** no drivetrain / 4WD / AWD field anywhere in the PDP →
+drivetrain stays a **best-effort title tag** (~10%).
+
+**Enrichment rules (per HANDOFF §2.1):**
+- Fetch only for listings already in the pool; **once per id** (dedup/cache); throttle (one
+  at a time, capped rate). Never crawl beyond the pool.
+- Merge PDP fields into `Listing.vehicle`; PDP values are **authoritative** over title-parsed
+  ones (exact odometer overrides "385K miles"; PDP make/model overrides the parser's guess).
+- Fields are **seller-optional** → `null` = "unknown," never a filter-exclude. Filters on
+  these follow the additive rule (unknowns stay visible unless the user opts to hide them).
+- `pdpAdapter` is the single boundary for these paths (mirror of the feed `adapter`); keep
+  paths in named constants.
+- Fixtures: `pdp-vehicle-1.json`, `pdp-vehicle-2.json`.
