@@ -1,0 +1,22 @@
+# Real captured Marketplace response bodies — private session data.
+# Keep these OUT of git history. The schema notes below are safe to track.
+fixtures/*.json
+!fixtures/SCHEMA_NOTES.md
+
+# Local capture artifacts
+marketplace-fixtures.json
+
+# Node / build artifacts (populated in later phases)
+node_modules/
+dist/
+.output/
+.wxt/
+.vite/
+*.log
+*.zip
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
