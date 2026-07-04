@@ -6,12 +6,13 @@
 
 import type { Listing, FuelType, Transmission, Drivetrain, DealBucket } from './types';
 import {
-  effYear, effMileage, effMake, effTrim, effBodyStyle, effDrivetrain,
+  effYear, effMileage, effMake, effModel, effTrim, effBodyStyle, effDrivetrain,
   effFuel, effTransmission, effSeller, effTitleStatus, effColor,
 } from './effective';
 
 export interface FilterState {
   makes?: string[];
+  models?: string[];
   yearMin?: number;
   yearMax?: number;
   priceMin?: number;
@@ -54,6 +55,7 @@ export function applyFilters(listings: Listing[], f: FilterState, now: number = 
 
     // additive, unknown-inclusive attribute filters
     if (!inSet(f.makes, effMake(l))) return false;
+    if (!inSet(f.models, effModel(l))) return false;
     if (!inRange(effYear(l), f.yearMin, f.yearMax)) return false;
     if (!inRange(l.price, f.priceMin, f.priceMax)) return false;
     if (!inRange(effMileage(l), f.milesMin, f.milesMax)) return false;

@@ -199,6 +199,7 @@ export function App({ store, actions }: { store: UiStore; actions: SiftActions }
   const activePool = useMemo(() => (showHidden ? snap.listings : snap.listings.filter((l) => !hidden.has(l.id))), [snap.listings, hidden, showHidden]);
   const view = useMemo(() => selectView(activePool, filters, sort), [activePool, filters, sort]);
   const makes = useMemo(() => [...new Set(snap.listings.map(effMake).filter((x): x is string => !!x))].sort(), [snap.listings]);
+  const models = useMemo(() => [...new Set(snap.listings.map(effModel).filter((x): x is string => !!x))].sort(), [snap.listings]);
   const set = (patch: Partial<FilterState>): void => setFilters((f) => ({ ...f, ...patch }));
 
   const onDown = (e: RMouseEvent): void => {
@@ -288,6 +289,17 @@ export function App({ store, actions }: { store: UiStore; actions: SiftActions }
                   <div className="chips">
                     {makes.map((m) => (
                       <Chip key={m} on={filters.makes?.includes(m)} onClick={() => set({ makes: toggleIn(filters.makes, m) })}>
+                        {titleCase(m)}
+                      </Chip>
+                    ))}
+                  </div>
+                </Section>
+              )}
+              {models.length > 0 && (
+                <Section label="Model">
+                  <div className="chips">
+                    {models.map((m) => (
+                      <Chip key={m} on={filters.models?.includes(m)} onClick={() => set({ models: toggleIn(filters.models, m) })}>
                         {titleCase(m)}
                       </Chip>
                     ))}

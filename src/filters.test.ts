@@ -17,6 +17,14 @@ describe('applyFilters — additive & unknown-inclusive', () => {
     expect(applyFilters([chevy, ford], { makes: ['chevrolet'] }).map((l) => l.id)).toEqual(['c']);
   });
 
+  it('model filter narrows by effective model (2500HD vs 1500)', () => {
+    const hd = mkListing({ id: 'hd', vehicle: { confidence: 'full', model: 'silverado 2500hd' } });
+    const half = mkListing({ id: 'half', vehicle: { confidence: 'full', model: 'silverado 1500' } });
+    const unknown = mkListing({ id: 'u' });
+    const out = applyFilters([hd, half, unknown], { models: ['silverado 2500hd'] });
+    expect(out.map((l) => l.id).sort()).toEqual(['hd', 'u']);
+  });
+
   it('price range keeps null-price listings (never hide)', () => {
     const a = mkListing({ id: 'a', price: 8000 });
     const b = mkListing({ id: 'b', price: 30000 });
