@@ -3,7 +3,7 @@
 // to similar-year/mileage peers already in the pool. Pure and deterministic.
 
 import type { Listing, DealRating, DealBucket } from './types';
-import { effYear, effMileage } from './effective';
+import { effYear, effMileage, effModel, effMake } from './effective';
 
 const MIN_PEERS = 4; // below this, we don't have enough to judge -> neutral
 
@@ -13,17 +13,29 @@ function median(nums: number[]): number {
   return s.length % 2 ? s[mid]! : (s[mid - 1]! + s[mid]!) / 2;
 }
 
-/** Prices of pooled listings similar to `target` (proximate year & mileage). */
+// A coarse "comparable class" key so a 2500HD is never priced against 1500s.
+// Collapses "hd" variants (parser is inconsistent about it); falls back to make
+// when the model is unknown.
+function dealKey(l: Listing): string | undefined {
+  const m = effModel(l);
+  if (m) return m.replace(/\s*hd\b/g, '').replace(/\s+/g, ' ').trim();
+  return effMake(l);
+}
+
+/** Prices of pooled listings COMPARABLE to `target`: same model class, proximate year & mileage. */
 function peerPrices(target: Listing, pool: Listing[]): number[] {
+  const tKey = dealKey(target);
   const ty = effYear(target);
   const tm = effMileage(target);
   const prices: number[] = [];
   for (const l of pool) {
     if (l.id === target.id || l.price === null) continue;
+    const lKey = dealKey(l);
+    if (tKey && lKey && lKey !== tKey) continue; // don't compare across model classes
     const ly = effYear(l);
     if (ty !== undefined && ly !== undefined && Math.abs(ly - ty) > 3) continue;
     const lm = effMileage(l);
-    if (tm !== undefined && lm !== undefined && Math.abs(lm - tm) > Math.max(50_000, tm * 0.4)) continue;
+    if (tm !== undefined && lm !== undefined && Math.abs(lm - tm) > Math.max(30_000, tm * 0.3)) continue;
     prices.push(l.price);
   }
   return prices;

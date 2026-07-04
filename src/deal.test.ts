@@ -37,6 +37,16 @@ describe('dealFor — pool-relative pricing', () => {
     const t = mkListing({ price: null });
     expect(dealFor(t, [t, ...peers()])).toEqual({ bucket: 'fair', delta: null });
   });
+
+  it('does not price a 2500HD against a pool of 1500s (segments by model class)', () => {
+    const hd = mkListing({ id: 't', price: 20000, vehicle: { confidence: 'full', year: 2015, mileage: 150_000, make: 'chevrolet', model: 'silverado 2500hd' } });
+    const halfTons = [26000, 25000, 27000, 24000, 25500].map((p, i) =>
+      mkListing({ id: `h${i}`, price: p, vehicle: { confidence: 'full', year: 2015, mileage: 150_000, make: 'chevrolet', model: 'silverado 1500' } }),
+    );
+    // Cheap 2500HD amid pricier 1500s used to read "great"; with segmentation it has no
+    // comparable peers, so it's honestly "fair" instead.
+    expect(dealFor(hd, [hd, ...halfTons]).bucket).toBe('fair');
+  });
 });
 
 describe('withDeals', () => {
