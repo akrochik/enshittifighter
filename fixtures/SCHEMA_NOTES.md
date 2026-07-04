@@ -217,4 +217,17 @@ drivetrain stays a **best-effort title tag** (~10%).
   these follow the additive rule (unknowns stay visible unless the user opts to hide them).
 - `pdpAdapter` is the single boundary for these paths (mirror of the feed `adapter`); keep
   paths in named constants.
-- Fixtures: `pdp-vehicle-1.json`, `pdp-vehicle-2.json`.
+- Fixtures: `pdp-vehicle-1.json`, `pdp-vehicle-2.json` (GraphQL-response form).
+
+**Enrichment fetch mechanism (confirmed live 2026-07-03).** For a listing the user
+hasn't opened, the enricher GETs `/marketplace/item/{id}/` and reads the embedded data:
+- A plain `fetch` (`Accept: */*`) returns a ~900 KB stripped page with **none** of the
+  vehicle fields (they load via async GraphQL after page JS runs).
+- The **same URL with `Accept: text/html`** returns the full ~2.3 MB document with the
+  `MarketplacePDPContainerQuery` result embedded in `RelayPrefetchedStreamCache` blocks
+  (`<script type="application/json">…</script>`) — all 19 `vehicle_*` fields present.
+- So enrichment = GET with `Accept: text/html` → regex the JSON script blobs → deep-search
+  for the object owning `vehicle_fuel_type` (the vehicle target) → `mapVehicleTarget`.
+  No `doc_id`, no `fb_dtsg`, no forged GraphQL — a plain page fetch. If FB stops embedding
+  this, re-probe the Accept/mechanism. Code: `pdpAdapter.extractVehicleDetailFromHtml` +
+  `enrich/fetchPdp.ts`; throttled once-each by `enrich/queue.ts`.

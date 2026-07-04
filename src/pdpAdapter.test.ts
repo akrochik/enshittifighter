@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { extractVehicleDetail } from './pdpAdapter';
+import { extractVehicleDetail, extractVehicleDetailFromHtml } from './pdpAdapter';
 
 const FIX = join(dirname(fileURLToPath(import.meta.url)), '..', 'fixtures');
 const read = (f: string): string => readFileSync(join(FIX, f), 'utf8');
@@ -53,5 +53,37 @@ describe('extractVehicleDetail — wrong/absent response', () => {
   it('garbage never throws', () => {
     expect(() => extractVehicleDetail('}{ not json')).not.toThrow();
     expect(extractVehicleDetail('}{ not json').schemaMiss).toBe(true);
+  });
+});
+
+describe('extractVehicleDetailFromHtml — item-page HTML (active enrichment)', () => {
+  // Mirrors the real FB embedding: the query result sits inside a
+  // RelayPrefetchedStreamCache blob in a <script type="application/json"> tag.
+  const target = {
+    id: '999',
+    vehicle_fuel_type: 'DIESEL',
+    vehicle_transmission_type: 'MANUAL',
+    vehicle_odometer_data: { unit: 'MILES', value: 88000 },
+    vehicle_make_display_name: 'Ram',
+    vehicle_seller_type: 'DEALER',
+    vehicle_title_status: 'CLEAN',
+  };
+  const payload = { require: [['RelayPrefetchedStreamCache', 'next', [], [{ __bbox: { result: { data: { viewer: { marketplace_product_details_page: { target } } } } } }]]] };
+  const html = `<!doctype html><html><head></head><body>
+<script type="application/json" data-sjs>${JSON.stringify(payload)}</script>
+<script type="application/json">{"unrelated":true}</script>
+</body></html>`;
+
+  it('finds and maps the embedded vehicle target', () => {
+    const r = extractVehicleDetailFromHtml(html);
+    expect(r.schemaMiss).toBe(false);
+    expect(r.id).toBe('999');
+    expect(r.detail).toMatchObject({ fuel: 'diesel', transmission: 'manual', mileage: 88000, make: 'ram', seller: 'dealer', titleStatus: 'clean' });
+  });
+
+  it('html without a vehicle target is a schema miss, not a throw', () => {
+    const r = extractVehicleDetailFromHtml('<html><body><script type="application/json">{"x":1}</script></body></html>');
+    expect(r.schemaMiss).toBe(true);
+    expect(r.detail).toBeNull();
   });
 });

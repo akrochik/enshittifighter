@@ -1,8 +1,11 @@
-// pdpAdapter.ts — the ONE module that knows Facebook's listing-detail-page
-// (MarketplacePDPContainerQuery) response shape. Raw text -> VehicleDetail, which
-// the store merges into the pooled Listing to power the structured filters
-// (fuel, transmission, exact mileage, title, seller, color) that the search feed
-// can't provide. Mirror of adapter.ts; all field paths live here.
+// pdpAdapter.ts — the ONE module that knows the listing-detail vehicle shape.
+// Two ways in, same output:
+//   - extractVehicleDetail(text): the GraphQL response (MarketplacePDPContainerQuery),
+//     as captured passively when the user opens a listing.
+//   - extractVehicleDetailFromHtml(html): the item-page HTML fetched with
+//     Accept:text/html, which embeds the same query result in RelayPrefetchedStreamCache
+//     blocks. This is how the throttled enricher reads listings the user hasn't opened.
+// Both funnel the raw `target` object through mapVehicleTarget().
 
 import type {
   VehicleDetail,
@@ -11,23 +14,6 @@ import type {
   SellerKind,
   TitleStatus,
 } from './types';
-
-const FB = {
-  target: (doc: any) => doc?.data?.viewer?.marketplace_product_details_page?.target,
-  id: (t: any) => t?.id,
-  fuel: (t: any) => t?.vehicle_fuel_type,
-  transmission: (t: any) => t?.vehicle_transmission_type,
-  odometer: (t: any) => t?.vehicle_odometer_data, // { unit, value }
-  make: (t: any) => t?.vehicle_make_display_name,
-  model: (t: any) => t?.vehicle_model_display_name,
-  trim: (t: any) => t?.vehicle_trim_display_name,
-  seller: (t: any) => t?.vehicle_seller_type,
-  exteriorColor: (t: any) => t?.vehicle_exterior_color,
-  interiorColor: (t: any) => t?.vehicle_interior_color,
-  titleStatus: (t: any) => t?.vehicle_title_status,
-  owners: (t: any) => t?.vehicle_number_of_owners,
-  vin: (t: any) => t?.vehicle_identification_number,
-} as const;
 
 const FUEL: Record<string, FuelType> = {
   GASOLINE: 'gas', GAS: 'gas', DIESEL: 'diesel', HYBRID: 'hybrid',
@@ -44,20 +30,76 @@ const str = (v: unknown): string | undefined =>
   typeof v === 'string' && v.trim() ? v.trim().toLowerCase() : undefined;
 
 export interface PdpResult {
-  /** listing id the detail belongs to — used to match it to the pooled listing */
-  id: string | null;
+  id: string | null; // the listing this detail belongs to
   detail: VehicleDetail | null;
-  /** parsed a response but the vehicle target was missing (shape changed) */
-  schemaMiss: boolean;
+  schemaMiss: boolean; // parsed a response/page but the vehicle target was missing
 }
 
+/** Map a raw FB vehicle `target` object to the internal VehicleDetail. */
+export function mapVehicleTarget(t: any): VehicleDetail {
+  const detail: VehicleDetail = {};
+
+  const fuel = t?.vehicle_fuel_type;
+  if (typeof fuel === 'string' && fuel) detail.fuel = FUEL[fuel] ?? 'other';
+
+  const trans = t?.vehicle_transmission_type;
+  if (typeof trans === 'string' && TRANS[trans]) detail.transmission = TRANS[trans];
+
+  const od = t?.vehicle_odometer_data;
+  if (od && typeof od.value === 'number') {
+    detail.mileage = od.unit === 'KILOMETERS' ? Math.round(od.value * 0.621371) : od.value;
+  }
+
+  const seller = t?.vehicle_seller_type;
+  if (typeof seller === 'string' && SELLER[seller]) detail.seller = SELLER[seller];
+
+  const title = t?.vehicle_title_status;
+  if (typeof title === 'string' && title) detail.titleStatus = TITLE[title] ?? 'other';
+
+  const owners = t?.vehicle_number_of_owners;
+  if (typeof owners === 'string' && OWNERS[owners] !== undefined) detail.numberOfOwners = OWNERS[owners];
+  else if (typeof owners === 'number' && owners > 0) detail.numberOfOwners = owners;
+
+  const make = str(t?.vehicle_make_display_name);
+  if (make) detail.make = make;
+  const model = str(t?.vehicle_model_display_name);
+  if (model) detail.model = model;
+  const trim = str(t?.vehicle_trim_display_name);
+  if (trim) detail.trim = trim;
+  const ext = str(t?.vehicle_exterior_color);
+  if (ext) detail.exteriorColor = ext;
+  const int = str(t?.vehicle_interior_color);
+  if (int) detail.interiorColor = int;
+  const vin = str(t?.vehicle_identification_number);
+  if (vin) detail.vin = vin.toUpperCase();
+
+  return detail;
+}
+
+function idOf(t: any): string | null {
+  const raw = t?.id;
+  return raw === null || raw === undefined ? null : String(raw);
+}
+
+/** Deep-search a parsed object graph for the first object that owns `key`. */
+function deepFindByKey(o: any, key: string, depth = 0): any {
+  if (!o || typeof o !== 'object' || depth > 40) return null;
+  if (Object.prototype.hasOwnProperty.call(o, key)) return o;
+  for (const k in o) {
+    const r = deepFindByKey(o[k], key, depth + 1);
+    if (r) return r;
+  }
+  return null;
+}
+
+// --- GraphQL response form (passive capture) ---
 function firstDoc(rawResponseText: string): any {
   for (const line of rawResponseText.split('\n')) {
     const s = line.trim();
     if (!s) continue;
     try {
       const doc = JSON.parse(s);
-      if (FB.target(doc)) return doc;
+      if (doc?.data?.viewer?.marketplace_product_details_page?.target) return doc;
     } catch {
       /* ignore */
     }
@@ -67,45 +109,26 @@ function firstDoc(rawResponseText: string): any {
 
 export function extractVehicleDetail(rawResponseText: string): PdpResult {
   const doc = firstDoc(rawResponseText);
-  const t = doc ? FB.target(doc) : undefined;
+  const t = doc?.data?.viewer?.marketplace_product_details_page?.target;
   if (!t) return { id: null, detail: null, schemaMiss: true };
+  return { id: idOf(t), detail: mapVehicleTarget(t), schemaMiss: false };
+}
 
-  const detail: VehicleDetail = {};
+// --- HTML form (active enrichment: GET item page with Accept:text/html) ---
+const SCRIPT_JSON = /<script[^>]*type="application\/json"[^>]*>([\s\S]*?)<\/script>/g;
 
-  const fuelRaw = FB.fuel(t);
-  if (typeof fuelRaw === 'string' && fuelRaw) detail.fuel = FUEL[fuelRaw] ?? 'other';
-
-  const transRaw = FB.transmission(t);
-  if (typeof transRaw === 'string' && TRANS[transRaw]) detail.transmission = TRANS[transRaw];
-
-  const od = FB.odometer(t);
-  if (od && typeof od.value === 'number') {
-    detail.mileage = od.unit === 'KILOMETERS' ? Math.round(od.value * 0.621371) : od.value;
+export function extractVehicleDetailFromHtml(html: string): PdpResult {
+  SCRIPT_JSON.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = SCRIPT_JSON.exec(html)) !== null) {
+    let parsed: any;
+    try {
+      parsed = JSON.parse(m[1]!);
+    } catch {
+      continue;
+    }
+    const target = deepFindByKey(parsed, 'vehicle_fuel_type');
+    if (target) return { id: idOf(target), detail: mapVehicleTarget(target), schemaMiss: false };
   }
-
-  const sellerRaw = FB.seller(t);
-  if (typeof sellerRaw === 'string' && SELLER[sellerRaw]) detail.seller = SELLER[sellerRaw];
-
-  const titleRaw = FB.titleStatus(t);
-  if (typeof titleRaw === 'string' && titleRaw) detail.titleStatus = TITLE[titleRaw] ?? 'other';
-
-  const ownersRaw = FB.owners(t);
-  if (typeof ownersRaw === 'string' && OWNERS[ownersRaw] !== undefined) detail.numberOfOwners = OWNERS[ownersRaw];
-  else if (typeof ownersRaw === 'number' && ownersRaw > 0) detail.numberOfOwners = ownersRaw;
-
-  const make = str(FB.make(t));
-  if (make) detail.make = make;
-  const model = str(FB.model(t));
-  if (model) detail.model = model;
-  const trim = str(FB.trim(t));
-  if (trim) detail.trim = trim;
-  const ext = str(FB.exteriorColor(t));
-  if (ext) detail.exteriorColor = ext;
-  const int = str(FB.interiorColor(t));
-  if (int) detail.interiorColor = int;
-  const vin = str(FB.vin(t));
-  if (vin) detail.vin = vin.toUpperCase();
-
-  const rawId = FB.id(t);
-  return { id: rawId === null || rawId === undefined ? null : String(rawId), detail, schemaMiss: false };
+  return { id: null, detail: null, schemaMiss: true };
 }
