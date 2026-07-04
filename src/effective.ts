@@ -12,7 +12,7 @@ export const effModel = (l: Listing): string | undefined => l.detail?.model ?? l
 export const effTrim = (l: Listing): string | undefined => l.detail?.trim ?? l.vehicle.trim;
 export const effBodyStyle = (l: Listing): string | undefined => l.vehicle.bodyStyle;
 export const effDrivetrain = (l: Listing): Drivetrain | undefined => l.vehicle.drivetrain; // title-only
-export const effFuel = (l: Listing): FuelType | undefined => l.detail?.fuel; // detail-only
+export const effFuel = (l: Listing): FuelType | undefined => l.detail?.fuel ?? l.vehicle.fuel; // detail authoritative, else title-mined
 export const effTransmission = (l: Listing): Transmission | undefined => l.detail?.transmission; // detail-only
 export const effSeller = (l: Listing): SellerKind | undefined => l.detail?.seller; // detail-only
 export const effTitleStatus = (l: Listing): TitleStatus | undefined => l.detail?.titleStatus; // detail-only

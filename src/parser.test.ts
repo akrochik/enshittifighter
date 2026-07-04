@@ -115,3 +115,15 @@ describe('parseVehicleTitle — unparseable titles are flagged, never crash', ()
     expect(v.model).toBe('silverado 2500hd');
   });
 });
+
+describe('parseVehicleTitle — best-effort fuel from the title', () => {
+  it.each<[string, string | undefined]>([
+    ['2015 GMC Sierra 2500 HD Crew Cab · Denali 6.6 LML Duramax', 'diesel'],
+    ['2016 Ram 2500 Cummins Turbo Diesel', 'diesel'],
+    ['2018 Ford F-250 6.7 Power Stroke', 'diesel'],
+    ['2005 Chevrolet Silverado 2500HD LS - DURAMAX - 4x4', 'diesel'],
+    ['2015 Chevrolet Silverado 1500 LT Crew Cab', undefined], // no signal -> stays unknown
+  ])('%s -> fuel %s', (title, fuel) => {
+    expect(parseVehicleTitle(title).fuel).toBe(fuel);
+  });
+});

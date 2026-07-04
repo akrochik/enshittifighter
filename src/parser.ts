@@ -7,7 +7,7 @@
 // (no model word), "...silverado 4x4 2500 diesel truck". So we regex the year /
 // mileage / drivetrain and run a small make/model dictionary with inference.
 
-import type { ParsedVehicle, Drivetrain, ParseConfidence } from './types';
+import type { ParsedVehicle, Drivetrain, FuelType, ParseConfidence } from './types';
 
 const CURRENT_YEAR = 2026;
 
@@ -102,6 +102,16 @@ function extractDrivetrain(t: string): Drivetrain | undefined {
   return undefined;
 }
 
+// Only high-confidence signals — a truck that names its diesel engine is definitely
+// diesel. We do NOT guess "gas" from weak cues (that's the enrichment's job); leaving
+// it undefined keeps the never-hide behavior for the genuinely-unknown ones.
+function extractFuel(t: string): FuelType | undefined {
+  if (/\b(diesel|duramax|cummins|power ?stroke|turbo ?diesel|l5p|lb7|lbz|lly|lml)\b/.test(t)) return 'diesel';
+  if (/\bgasoline\b/.test(t)) return 'gas';
+  if (/\bhybrid\b/.test(t)) return 'hybrid';
+  return undefined;
+}
+
 function firstMatch(t: string, list: string[], aliases: Record<string, string>): string | undefined {
   for (const kw of list) if (has(t, kw)) return aliases[kw] ?? kw;
   return undefined;
@@ -166,6 +176,7 @@ export function parseVehicleTitle(rawTitle: string): ParsedVehicle {
   const year = extractYear(t);
   const mileage = extractMileage(t);
   const drivetrain = extractDrivetrain(t);
+  const fuel = extractFuel(t);
   const trimRaw = firstMatch(t, TRIMS, TRIM_ALIASES);
   const bodyStyle = firstMatch(t, BODIES, BODY_ALIASES);
 
@@ -197,6 +208,7 @@ export function parseVehicleTitle(rawTitle: string): ParsedVehicle {
   if (bodyStyle) v.bodyStyle = bodyStyle;
   if (mileage !== undefined) v.mileage = mileage;
   if (drivetrain) v.drivetrain = drivetrain;
+  if (fuel) v.fuel = fuel;
   if (makeInferred) v.makeInferred = true;
   if (modelInferred) v.modelInferred = true;
   return v;

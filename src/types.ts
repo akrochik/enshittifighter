@@ -18,6 +18,7 @@ export interface ParsedVehicle {
   bodyStyle?: string; // cab style, e.g. "crew cab"
   mileage?: number; // miles, from title text
   drivetrain?: Drivetrain; // best-effort (FB has no structured drivetrain field)
+  fuel?: FuelType; // best-effort from the title (e.g. "duramax"/"diesel"); the detail page is authoritative
   makeInferred?: boolean; // make derived from model (silverado -> chevrolet)
   modelInferred?: boolean; // model derived from a bare number ("2500 hd" + chevy)
   confidence: ParseConfidence;
