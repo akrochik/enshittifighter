@@ -1,5 +1,6 @@
-import { useMemo, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { ReactNode, MouseEvent as RMouseEvent } from 'react';
+import { storage } from 'wxt/utils/storage';
 import type { UiStore, SiftActions } from '../src/ui/uiStore';
 import type { Listing, FuelType, Transmission, DealBucket } from '../src/types';
 import { selectView } from '../src/view';
@@ -7,6 +8,10 @@ import type { FilterState, SortField } from '../src/filters';
 import { DEFAULT_SORT } from '../src/filters';
 import { effMake, effModel, effTrim, effBodyStyle, effFuel, effTransmission, effDrivetrain } from '../src/effective';
 import { PANEL_CSS } from './styles';
+
+// Persisted across sessions (needs the "storage" permission).
+const seenItem = storage.defineItem<string[]>('local:sift:seen', { fallback: [] });
+const prefsItem = storage.defineItem<{ width: number; tile: number }>('local:sift:prefs', { fallback: { width: 660, tile: 380 } });
 
 // ---- user-facing formatting (nothing here reveals where a value came from) ----
 const FUEL_LABEL: Record<FuelType, string> = { gas: 'Gas', diesel: 'Diesel', hybrid: 'Hybrid', electric: 'Electric', other: 'Other' };
@@ -79,18 +84,20 @@ function Toggle({ on, onClick, children }: { on: boolean; onClick: () => void; c
   );
 }
 
-function Card({ l }: { l: Listing }) {
+function Card({ l, seen, onSeen }: { l: Listing; seen: boolean; onSeen: (id: string) => void }) {
   const facets = facetsOf(l);
   const unparsed = l.vehicle.confidence === 'none';
   const deal = l.deal;
+  const view = (): void => onSeen(l.id);
   return (
-    <li className={`card${unparsed ? ' unparsed' : ''}`}>
-      <a className="thumb" href={l.listingUrl} target="_blank" rel="noreferrer">
+    <li className={`card${unparsed ? ' unparsed' : ''}${seen ? ' seen' : ''}`}>
+      <a className="thumb" href={l.listingUrl} target="_blank" rel="noreferrer" onClick={view} onAuxClick={view}>
         {l.photoUrl ? <img src={l.photoUrl} alt="" loading="lazy" /> : <span className="noimg">no photo</span>}
         {isJustListed(l) && <span className="badge just">Just listed</span>}
+        {seen && <span className="badge seen">✓ Seen</span>}
       </a>
       <div className="body">
-        <a className="title" href={l.listingUrl} target="_blank" rel="noreferrer">
+        <a className="title" href={l.listingUrl} target="_blank" rel="noreferrer" onClick={view} onAuxClick={view}>
           {l.rawTitle || 'Untitled listing'}
         </a>
         {facets.length > 0 && (
@@ -126,8 +133,43 @@ export function App({ store, actions }: { store: UiStore; actions: SiftActions }
   const [sort, setSort] = useState<SortField[]>(DEFAULT_SORT);
   const [open, setOpen] = useState(true);
   const [showFilters, setShowFilters] = useState(true);
-  const [width, setWidth] = useState(640);
   const [resizing, setResizing] = useState(false);
+  const [width, setWidth] = useState(660);
+  const [tile, setTile] = useState(380);
+  const [seen, setSeen] = useState<Set<string>>(new Set());
+  const loaded = useRef(false);
+
+  // load persisted "seen" set + panel prefs once
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const [s, p] = await Promise.all([seenItem.getValue(), prefsItem.getValue()]);
+      if (!alive) return;
+      setSeen(new Set(s));
+      setWidth(p.width);
+      setTile(p.tile);
+      loaded.current = true;
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+  // save prefs (debounced so dragging/sliding doesn't hammer storage)
+  useEffect(() => {
+    if (!loaded.current) return;
+    const t = setTimeout(() => void prefsItem.setValue({ width, tile }), 400);
+    return () => clearTimeout(t);
+  }, [width, tile]);
+
+  const markSeen = (id: string): void => {
+    setSeen((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      void seenItem.setValue([...next]);
+      return next;
+    });
+  };
 
   const view = useMemo(() => selectView(snap.listings, filters, sort), [snap.listings, filters, sort]);
   const makes = useMemo(() => [...new Set(snap.listings.map(effMake).filter((x): x is string => !!x))].sort(), [snap.listings]);
@@ -146,8 +188,6 @@ export function App({ store, actions }: { store: UiStore; actions: SiftActions }
       document.removeEventListener('mouseup', up, true);
       setResizing(false);
     };
-    // Listen on document (capture) so release is caught no matter what's under
-    // the cursor — including our own panel, which sits above any overlay.
     document.addEventListener('mousemove', move, true);
     document.addEventListener('mouseup', up, true);
   };
@@ -209,6 +249,9 @@ export function App({ store, actions }: { store: UiStore; actions: SiftActions }
           <Chip on={hasDeal} onClick={() => setSort([{ key: 'deal', dir: 'asc' }, ...DEFAULT_SORT])}>
             Best deals first
           </Chip>
+          <label className="sizer" title="Card size">
+            <input type="range" min={260} max={580} step={20} value={tile} onChange={(e) => setTile(Number(e.target.value))} />
+          </label>
         </div>
 
         <div className="scroll">
@@ -314,9 +357,9 @@ export function App({ store, actions }: { store: UiStore; actions: SiftActions }
             </div>
           )}
 
-          <ul className="results">
+          <ul className="results" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${tile}px, 1fr))` }}>
             {view.listings.map((l) => (
-              <Card key={l.id} l={l} />
+              <Card key={l.id} l={l} seen={seen.has(l.id)} onSeen={markSeen} />
             ))}
           </ul>
         </div>
