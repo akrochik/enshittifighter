@@ -46,6 +46,11 @@ export default defineContentScript({
         queue.reset();
         push({ schemaError: false });
       },
+      // The sidebar drives enrichment: it hands over the filtered view (in order),
+      // so we fetch details for the trucks that currently matter first.
+      setEnrichPriority: (ids) => {
+        void queue.setPriority(ids);
+      },
     };
     void mountSidebar(ctx, store, actions);
 
@@ -61,12 +66,9 @@ export default defineContentScript({
         push({ schemaError: true }); // fail loud: captured a response, extracted nothing
         return;
       }
-      if (r.kind === 'search') {
-        if (searchKey !== lastSearchKey) {
-          lastSearchKey = searchKey;
-          queue.reset();
-        }
-        void queue.enqueue(pool.pendingEnrichment());
+      if (r.kind === 'search' && searchKey !== lastSearchKey) {
+        lastSearchKey = searchKey; // new query -> pool cleared; drop the old work-list
+        queue.reset();
       }
       push({ schemaError: false });
     });

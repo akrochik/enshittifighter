@@ -8,6 +8,8 @@ import type { Listing } from '../types';
 /** UI -> relay actions (the panel can ask the relay to do things). */
 export interface SiftActions {
   clearPool: () => void;
+  /** The current filtered view, in order — the enricher fetches these first. */
+  setEnrichPriority: (ids: string[]) => void;
 }
 
 export interface UiSnapshot {

@@ -200,6 +200,12 @@ export function App({ store, actions }: { store: UiStore; actions: SiftActions }
   const view = useMemo(() => selectView(activePool, filters, sort), [activePool, filters, sort]);
   const makes = useMemo(() => [...new Set(snap.listings.map(effMake).filter((x): x is string => !!x))].sort(), [snap.listings]);
   const models = useMemo(() => [...new Set(snap.listings.map(effModel).filter((x): x is string => !!x))].sort(), [snap.listings]);
+
+  // Tell the enricher which trucks to fetch first: exactly the ones on screen, in order.
+  const viewIds = useMemo(() => view.listings.map((l) => l.id), [view.listings]);
+  useEffect(() => {
+    actions.setEnrichPriority(viewIds);
+  }, [viewIds, actions]);
   const set = (patch: Partial<FilterState>): void => setFilters((f) => ({ ...f, ...patch }));
 
   const onDown = (e: RMouseEvent): void => {
