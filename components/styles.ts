@@ -74,7 +74,7 @@ button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid var(-
 .banner.empty>b{display:block}
 
 .results{list-style:none;margin:0;padding:10px 12px 16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:11px;align-content:start}
-.card{display:flex;flex-direction:column;background:var(--panel2);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.card{position:relative;display:flex;flex-direction:column;background:var(--panel2);border:1px solid var(--line);border-radius:12px;overflow:hidden}
 .card:hover{border-color:var(--line2)}
 .card.unparsed{border-left:3px solid var(--warn)}
 .card.seen{opacity:.72}
@@ -82,10 +82,17 @@ button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid var(-
 .thumb{position:relative;width:100%;aspect-ratio:4/3;background:#20262f;display:block}
 .thumb img{width:100%;height:100%;object-fit:cover;display:block}
 .card.seen .thumb img{filter:brightness(.5)}
+.card.hidden{opacity:.5}
+.hidebtn{position:absolute;top:6px;right:6px;z-index:3;width:24px;height:24px;display:grid;place-items:center;border-radius:6px;background:rgba(8,12,17,.72);border:1px solid rgba(255,255,255,.14);color:#dbe2ea;font-size:12px;opacity:0;transition:.12s}
+.card:hover .hidebtn,.card.hidden .hidebtn{opacity:1}
+.hidebtn:hover{background:var(--danger);color:#fff;border-color:transparent}
+.hiddenbar{display:flex;align-items:center;gap:10px;padding:8px 14px 0;font-size:11.5px;color:var(--faint)}
+.linkbtn{background:none;border:none;color:var(--accent);font:600 11.5px var(--ui);cursor:pointer;padding:0}
+.linkbtn:hover{text-decoration:underline}
 .noimg{position:absolute;inset:0;display:grid;place-items:center;color:var(--faint);font-size:11px}
 .badge{position:absolute;top:7px;font:700 9.5px/1 var(--ui);padding:4px 6px;border-radius:5px}
 .badge.just{left:7px;background:var(--deal);color:#0c2a1c}
-.badge.seen{right:7px;background:rgba(8,12,17,.85);color:#dbe2ea;border:1px solid rgba(255,255,255,.14)}
+.badge.seen{top:auto;bottom:7px;left:7px;background:rgba(8,12,17,.85);color:#dbe2ea;border:1px solid rgba(255,255,255,.14)}
 .body{min-width:0;display:flex;flex-direction:column;gap:6px;padding:10px 12px 12px}
 .title{font-size:13.5px;font-weight:600;line-height:1.3;color:var(--ink);text-decoration:none;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .title:hover{text-decoration:underline}

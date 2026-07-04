@@ -12,6 +12,7 @@ import { PANEL_CSS } from './styles';
 // Persisted across sessions (needs the "storage" permission).
 const seenItem = storage.defineItem<string[]>('local:sift:seen', { fallback: [] });
 const prefsItem = storage.defineItem<{ width: number; tile: number }>('local:sift:prefs', { fallback: { width: 660, tile: 380 } });
+const hiddenItem = storage.defineItem<string[]>('local:sift:hidden', { fallback: [] });
 
 // ---- user-facing formatting (nothing here reveals where a value came from) ----
 const FUEL_LABEL: Record<FuelType, string> = { gas: 'Gas', diesel: 'Diesel', hybrid: 'Hybrid', electric: 'Electric', other: 'Other' };
@@ -84,13 +85,24 @@ function Toggle({ on, onClick, children }: { on: boolean; onClick: () => void; c
   );
 }
 
-function Card({ l, seen, onSeen }: { l: Listing; seen: boolean; onSeen: (id: string) => void }) {
+function Card({ l, seen, hidden, onSeen, onToggleHide }: { l: Listing; seen: boolean; hidden: boolean; onSeen: (id: string) => void; onToggleHide: (id: string) => void }) {
   const facets = facetsOf(l);
   const unparsed = l.vehicle.confidence === 'none';
   const deal = l.deal;
   const view = (): void => onSeen(l.id);
   return (
-    <li className={`card${unparsed ? ' unparsed' : ''}${seen ? ' seen' : ''}`}>
+    <li className={`card${unparsed ? ' unparsed' : ''}${seen ? ' seen' : ''}${hidden ? ' hidden' : ''}`}>
+      <button
+        className="hidebtn"
+        title={hidden ? 'Unhide' : 'Hide — never show this listing again'}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onToggleHide(l.id);
+        }}
+      >
+        {hidden ? '↩' : '✕'}
+      </button>
       <a className="thumb" href={l.listingUrl} target="_blank" rel="noreferrer" onClick={view} onAuxClick={view}>
         {l.photoUrl ? <img src={l.photoUrl} alt="" loading="lazy" /> : <span className="noimg">no photo</span>}
         {isJustListed(l) && <span className="badge just">Just listed</span>}
@@ -137,15 +149,18 @@ export function App({ store, actions }: { store: UiStore; actions: SiftActions }
   const [width, setWidth] = useState(660);
   const [tile, setTile] = useState(380);
   const [seen, setSeen] = useState<Set<string>>(new Set());
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const [showHidden, setShowHidden] = useState(false);
   const loaded = useRef(false);
 
   // load persisted "seen" set + panel prefs once
   useEffect(() => {
     let alive = true;
     void (async () => {
-      const [s, p] = await Promise.all([seenItem.getValue(), prefsItem.getValue()]);
+      const [s, p, h] = await Promise.all([seenItem.getValue(), prefsItem.getValue(), hiddenItem.getValue()]);
       if (!alive) return;
       setSeen(new Set(s));
+      setHidden(new Set(h));
       setWidth(p.width);
       setTile(p.tile);
       loaded.current = true;
@@ -170,8 +185,19 @@ export function App({ store, actions }: { store: UiStore; actions: SiftActions }
       return next;
     });
   };
+  const toggleHide = (id: string): void => {
+    setHidden((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      void hiddenItem.setValue([...next]);
+      return next;
+    });
+  };
 
-  const view = useMemo(() => selectView(snap.listings, filters, sort), [snap.listings, filters, sort]);
+  const hiddenCount = useMemo(() => snap.listings.reduce((n, l) => n + (hidden.has(l.id) ? 1 : 0), 0), [snap.listings, hidden]);
+  const activePool = useMemo(() => (showHidden ? snap.listings : snap.listings.filter((l) => !hidden.has(l.id))), [snap.listings, hidden, showHidden]);
+  const view = useMemo(() => selectView(activePool, filters, sort), [activePool, filters, sort]);
   const makes = useMemo(() => [...new Set(snap.listings.map(effMake).filter((x): x is string => !!x))].sort(), [snap.listings]);
   const set = (patch: Partial<FilterState>): void => setFilters((f) => ({ ...f, ...patch }));
 
@@ -215,7 +241,7 @@ export function App({ store, actions }: { store: UiStore; actions: SiftActions }
 
         <div className="head">
           <div className="brand">
-            <span className="mark">◧</span> Marketplace Sift
+            <span className="mark">◧</span> Enshittifighter
           </div>
           <span className="count">
             <b>{view.matchCount}</b> of {view.poolCount}
@@ -357,9 +383,28 @@ export function App({ store, actions }: { store: UiStore; actions: SiftActions }
             </div>
           )}
 
+          {hiddenCount > 0 && (
+            <div className="hiddenbar">
+              <span>{hiddenCount} hidden</span>
+              <button className="linkbtn" onClick={() => setShowHidden((v) => !v)}>
+                {showHidden ? 'Hide them' : 'Show'}
+              </button>
+              {showHidden && (
+                <button
+                  className="linkbtn"
+                  onClick={() => {
+                    setHidden(new Set());
+                    void hiddenItem.setValue([]);
+                  }}
+                >
+                  Unhide all
+                </button>
+              )}
+            </div>
+          )}
           <ul className="results" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${tile}px, 1fr))` }}>
             {view.listings.map((l) => (
-              <Card key={l.id} l={l} seen={seen.has(l.id)} onSeen={markSeen} />
+              <Card key={l.id} l={l} seen={seen.has(l.id)} hidden={hidden.has(l.id)} onSeen={markSeen} onToggleHide={toggleHide} />
             ))}
           </ul>
         </div>
