@@ -7,6 +7,7 @@ import { isCaptureMessage } from '../src/capture/types';
 import { EnrichQueue } from '../src/enrich/queue';
 import { fetchVehicleDetail } from '../src/enrich/fetchPdp';
 import { UiStore } from '../src/ui/uiStore';
+import type { SiftActions } from '../src/ui/uiStore';
 import { mountSidebar } from '../components/mount';
 import type { ContentScriptContext } from 'wxt/utils/content-script-context';
 
@@ -15,8 +16,6 @@ export default defineContentScript({
   runAt: 'document_start',
   main(ctx: ContentScriptContext) {
     const store = new UiStore();
-    void mountSidebar(ctx, store);
-
     const pool = new Pool();
     let lastSearchKey = '';
 
@@ -38,6 +37,17 @@ export default defineContentScript({
       },
       { delayMs: 2000 },
     );
+
+    // "Clear" empties the pool so a re-scroll (e.g. after applying Facebook's own
+    // price filter) repopulates it cleanly — without waiting for a new search term.
+    const actions: SiftActions = {
+      clearPool: () => {
+        pool.clear();
+        queue.reset();
+        push({ schemaError: false });
+      },
+    };
+    void mountSidebar(ctx, store, actions);
 
     window.addEventListener('message', (e: MessageEvent) => {
       if (e.source !== window || e.origin !== location.origin) return;

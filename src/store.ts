@@ -71,6 +71,11 @@ export class Pool {
     return this.map.get(id);
   }
 
+  /** Empty the pool, keeping the current search key. Backs the UI "Clear" button. */
+  clear(): void {
+    this.map.clear();
+  }
+
   all(): Listing[] {
     return [...this.map.values()];
   }

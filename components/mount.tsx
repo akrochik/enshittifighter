@@ -1,11 +1,11 @@
 import ReactDOM from 'react-dom/client';
 import type { ContentScriptContext } from 'wxt/utils/content-script-context';
 import { App } from './App';
-import type { UiStore } from '../src/ui/uiStore';
+import type { UiStore, SiftActions } from '../src/ui/uiStore';
 
 // Mount the panel inside an isolated shadow root so Facebook's CSS can't reach in
 // and ours can't leak out — satisfies the "independent sidebar, no DOM surgery" rule.
-export async function mountSidebar(ctx: ContentScriptContext, store: UiStore): Promise<void> {
+export async function mountSidebar(ctx: ContentScriptContext, store: UiStore, actions: SiftActions): Promise<void> {
   const ui = await createShadowRootUi(ctx, {
     name: 'marketplace-sift',
     position: 'inline',
@@ -13,7 +13,7 @@ export async function mountSidebar(ctx: ContentScriptContext, store: UiStore): P
     append: 'last',
     onMount(container) {
       const root = ReactDOM.createRoot(container);
-      root.render(<App store={store} />);
+      root.render(<App store={store} actions={actions} />);
       return root;
     },
     onRemove(root) {

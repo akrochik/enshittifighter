@@ -5,6 +5,11 @@
 
 import type { Listing } from '../types';
 
+/** UI -> relay actions (the panel can ask the relay to do things). */
+export interface SiftActions {
+  clearPool: () => void;
+}
+
 export interface UiSnapshot {
   listings: Listing[]; // the raw pool; the panel deal-scores/filters/sorts it
   poolCount: number;
