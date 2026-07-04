@@ -1,0 +1,17 @@
+{
+  "name": "marketplace-sift",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "description": "Client-side re-filtering and re-sorting of Facebook Marketplace vehicle search. Offline core (types, adapters, parser, store, filters, deal score) — tested against Phase-0 fixtures.",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  }
+}
