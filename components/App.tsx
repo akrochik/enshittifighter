@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useMemo, useState, useSyncExternalStore } from 'react';
 import type { ReactNode, MouseEvent as RMouseEvent } from 'react';
 import type { UiStore, SiftActions } from '../src/ui/uiStore';
 import type { Listing, FuelType, Transmission, DealBucket } from '../src/types';
@@ -128,7 +128,6 @@ export function App({ store, actions }: { store: UiStore; actions: SiftActions }
   const [showFilters, setShowFilters] = useState(true);
   const [width, setWidth] = useState(640);
   const [resizing, setResizing] = useState(false);
-  const drag = useRef<{ x: number; w: number } | null>(null);
 
   const view = useMemo(() => selectView(snap.listings, filters, sort), [snap.listings, filters, sort]);
   const makes = useMemo(() => [...new Set(snap.listings.map(effMake).filter((x): x is string => !!x))].sort(), [snap.listings]);
@@ -136,17 +135,21 @@ export function App({ store, actions }: { store: UiStore; actions: SiftActions }
 
   const onDown = (e: RMouseEvent): void => {
     e.preventDefault();
-    drag.current = { x: e.clientX, w: width };
+    const startX = e.clientX;
+    const startW = width;
     setResizing(true);
-  };
-  const onMove = (e: RMouseEvent): void => {
-    const d = drag.current;
-    if (!d) return;
-    setWidth(Math.max(380, Math.min(window.innerWidth - 40, d.w + (d.x - e.clientX))));
-  };
-  const onUp = (): void => {
-    drag.current = null;
-    setResizing(false);
+    const move = (ev: MouseEvent): void => {
+      setWidth(Math.max(380, Math.min(window.innerWidth - 40, startW + (startX - ev.clientX))));
+    };
+    const up = (): void => {
+      document.removeEventListener('mousemove', move, true);
+      document.removeEventListener('mouseup', up, true);
+      setResizing(false);
+    };
+    // Listen on document (capture) so release is caught no matter what's under
+    // the cursor — including our own panel, which sits above any overlay.
+    document.addEventListener('mousemove', move, true);
+    document.addEventListener('mouseup', up, true);
   };
 
   if (!open) {
@@ -318,7 +321,7 @@ export function App({ store, actions }: { store: UiStore; actions: SiftActions }
           </ul>
         </div>
       </aside>
-      {resizing && <div className="rz-overlay" onMouseMove={onMove} onMouseUp={onUp} />}
+      {resizing && <div className="rz-overlay" />}
     </>
   );
 }
