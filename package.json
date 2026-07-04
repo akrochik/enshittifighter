@@ -1,7 +1,7 @@
 {
   "name": "enshittifighter",
   "private": true,
-  "version": "0.0.1",
+  "version": "0.0.2",
   "type": "module",
   "description": "Client-side re-filtering and re-sorting of Facebook Marketplace vehicle search. Offline core (types, adapters, parser, store, filters, deal score) — tested against Phase-0 fixtures.",
   "scripts": {
