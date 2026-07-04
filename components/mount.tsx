@@ -20,5 +20,10 @@ export async function mountSidebar(ctx: ContentScriptContext, store: UiStore): P
       root?.unmount();
     },
   });
+  // The relay runs at document_start to catch early captures, but the panel
+  // anchors to <body> — wait for it before mounting.
+  if (!document.body) {
+    await new Promise<void>((resolve) => document.addEventListener('DOMContentLoaded', () => resolve(), { once: true }));
+  }
   ui.mount();
 }
