@@ -8,11 +8,20 @@ import type { PdpResult } from '../pdpAdapter';
 
 const ITEM_URL = (id: string): string => `https://www.facebook.com/marketplace/item/${encodeURIComponent(id)}/`;
 
-export async function fetchVehicleDetail(id: string): Promise<PdpResult> {
-  const res = await fetch(ITEM_URL(id), {
-    credentials: 'include',
-    headers: { Accept: 'text/html,application/xhtml+xml' },
-  });
-  const html = await res.text();
-  return extractVehicleDetailFromHtml(html);
+export async function fetchVehicleDetail(id: string, timeoutMs = 12000): Promise<PdpResult> {
+  // Timeout so a single hung request can't stall the whole (sequential) queue —
+  // on abort this throws, the queue catches it, marks this one failed, and moves on.
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(ITEM_URL(id), {
+      credentials: 'include',
+      headers: { Accept: 'text/html,application/xhtml+xml' },
+      signal: ctrl.signal,
+    });
+    const html = await res.text();
+    return extractVehicleDetailFromHtml(html);
+  } finally {
+    clearTimeout(timer);
+  }
 }
