@@ -1,0 +1,9 @@
+{
+  "//": "Full-project typecheck (src + components + entrypoints) with WXT globals + JSX. `npm run typecheck` covers src strictly; this covers the React UI.",
+  "extends": "./.wxt/tsconfig.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "jsxImportSource": "react",
+    "noUnusedLocals": true
+  }
+}

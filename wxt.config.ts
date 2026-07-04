@@ -3,6 +3,7 @@ import { defineConfig } from 'wxt';
 // Chrome MV3 is the build target; WXT keeps a Firefox build a flag away.
 export default defineConfig({
   srcDir: '.',
+  modules: ['@wxt-dev/module-react'],
   manifest: {
     name: 'Marketplace Sift',
     description: 'Cleaner filtering and sorting for Facebook Marketplace vehicle search.',
