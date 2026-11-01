@@ -17,7 +17,7 @@ import type {
 
 const FUEL: Record<string, FuelType> = {
   GASOLINE: 'gas', GAS: 'gas', DIESEL: 'diesel', HYBRID: 'hybrid',
-  PLUGIN_HYBRID: 'hybrid', ELECTRIC: 'electric',
+  PLUGIN_HYBRID: 'hybrid', PLUG_IN_HYBRID: 'hybrid', ELECTRIC: 'electric',
 };
 const TRANS: Record<string, Transmission> = { AUTOMATIC: 'automatic', MANUAL: 'manual' };
 const SELLER: Record<string, SellerKind> = { PRIVATE_SELLER: 'private', DEALER: 'dealer', DEALERSHIP: 'dealer' };
@@ -46,8 +46,9 @@ export function mapVehicleTarget(t: any): VehicleDetail {
   if (typeof trans === 'string' && TRANS[trans]) detail.transmission = TRANS[trans];
 
   const od = t?.vehicle_odometer_data;
-  if (od && typeof od.value === 'number') {
-    detail.mileage = od.unit === 'KILOMETERS' ? Math.round(od.value * 0.621371) : od.value;
+  const odValue = typeof od?.value === 'number' ? od.value : typeof od?.value === 'string' ? Number(od.value) : NaN;
+  if (Number.isFinite(odValue) && odValue >= 0) {
+    detail.mileage = od.unit === 'KILOMETERS' ? Math.round(odValue * 0.621371) : odValue;
   }
 
   const seller = t?.vehicle_seller_type;
@@ -81,15 +82,12 @@ function idOf(t: any): string | null {
   return raw === null || raw === undefined ? null : String(raw);
 }
 
-/** Deep-search a parsed object graph for the first object that owns `key`. */
-function deepFindByKey(o: any, key: string, depth = 0): any {
-  if (!o || typeof o !== 'object' || depth > 40) return null;
-  if (Object.prototype.hasOwnProperty.call(o, key)) return o;
-  for (const k in o) {
-    const r = deepFindByKey(o[k], key, depth + 1);
-    if (r) return r;
-  }
-  return null;
+/** Deep-search a parsed object graph for every object that owns `key`. */
+function deepFindAllByKey(o: any, key: string, out: any[] = [], depth = 0): any[] {
+  if (!o || typeof o !== 'object' || depth > 40) return out;
+  if (Object.prototype.hasOwnProperty.call(o, key)) out.push(o);
+  for (const k in o) deepFindAllByKey(o[k], key, out, depth + 1);
+  return out;
 }
 
 // --- GraphQL response form (passive capture) ---
@@ -117,8 +115,14 @@ export function extractVehicleDetail(rawResponseText: string): PdpResult {
 // --- HTML form (active enrichment: GET item page with Accept:text/html) ---
 const SCRIPT_JSON = /<script[^>]*type="application\/json"[^>]*>([\s\S]*?)<\/script>/g;
 
-export function extractVehicleDetailFromHtml(html: string): PdpResult {
+/**
+ * `expectedId` is the listing we fetched. An item page can embed more than one
+ * vehicle record (e.g. related listings), so prefer the one whose id matches and
+ * never return a record that is positively some OTHER listing's.
+ */
+export function extractVehicleDetailFromHtml(html: string, expectedId?: string): PdpResult {
   SCRIPT_JSON.lastIndex = 0;
+  let fallback: any = null;
   let m: RegExpExecArray | null;
   while ((m = SCRIPT_JSON.exec(html)) !== null) {
     let parsed: any;
@@ -127,8 +131,14 @@ export function extractVehicleDetailFromHtml(html: string): PdpResult {
     } catch {
       continue;
     }
-    const target = deepFindByKey(parsed, 'vehicle_fuel_type');
-    if (target) return { id: idOf(target), detail: mapVehicleTarget(target), schemaMiss: false };
+    for (const target of deepFindAllByKey(parsed, 'vehicle_fuel_type')) {
+      const id = idOf(target);
+      if (expectedId === undefined || id === expectedId) {
+        return { id, detail: mapVehicleTarget(target), schemaMiss: false };
+      }
+      if (id === null && !fallback) fallback = target; // unlabeled: usable if nothing better turns up
+    }
   }
+  if (fallback) return { id: expectedId ?? null, detail: mapVehicleTarget(fallback), schemaMiss: false };
   return { id: null, detail: null, schemaMiss: true };
 }

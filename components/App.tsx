@@ -296,6 +296,11 @@ export function App({ store, actions }: { store: UiStore; actions: SiftActions }
           </div>
         )}
         {snap.enriching > 0 && <div className="enrich">Getting vehicle details… {snap.enriching} to go</div>}
+        {snap.enrichHalted && (
+          <div className="enrich halted" title="Several detail pages in a row failed to load, so fetching stopped. Clear restarts it.">
+            Stopped getting vehicle details — Facebook isn’t answering. Hit <b>Clear</b> to try again later.
+          </div>
+        )}
 
         <div className="sortbar">
           <span className="flabel">Sort</span>

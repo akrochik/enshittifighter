@@ -5,6 +5,7 @@
 
 import { MS_SOURCE, MS_CAPTURE } from './types';
 import type { Captured } from './types';
+import { classify } from './classify';
 
 export function installCaptureHook(): void {
   const w = window as unknown as { __MS_HOOK__?: boolean };
@@ -15,11 +16,21 @@ export function installCaptureHook(): void {
 
   const friendlyNameOf = (body: unknown): string => {
     try {
-      return new URLSearchParams(typeof body === 'string' ? body : '').get('fb_api_req_friendly_name') ?? '';
+      const params =
+        typeof body === 'string'
+          ? new URLSearchParams(body)
+          : body instanceof URLSearchParams || body instanceof FormData
+            ? body
+            : null;
+      const v = params?.get('fb_api_req_friendly_name');
+      return typeof v === 'string' ? v : '';
     } catch {
       return '';
     }
   };
+  // Only queries the relay will use cross the postMessage boundary — not the dozens
+  // of Messenger/presence/typeahead responses on every page.
+  const wanted = (friendlyName: string): boolean => classify(friendlyName) !== 'ignore';
 
   const post = (payload: Captured): void => {
     try {
@@ -41,7 +52,7 @@ export function installCaptureHook(): void {
     const gql = isGql(url);
     const friendlyName = gql ? friendlyNameOf(init?.body) : '';
     const ret = origFetch(input, init);
-    if (!gql) return ret;
+    if (!gql || !wanted(friendlyName)) return ret;
     return ret.then((res) => {
       try {
         res
@@ -66,7 +77,8 @@ export function installCaptureHook(): void {
   const origSend = XP.send;
   XP.open = function (this: { __msUrl?: string }, ...args: unknown[]) {
     try {
-      this.__msUrl = typeof args[1] === 'string' ? args[1] : '';
+      const u = args[1];
+      this.__msUrl = typeof u === 'string' ? u : u instanceof URL ? u.href : '';
     } catch {
       /* ignore */
     }
@@ -77,14 +89,16 @@ export function installCaptureHook(): void {
       const url = this.__msUrl ?? '';
       if (isGql(url)) {
         const body = args[0];
-        const friendlyName = friendlyNameOf(typeof body === 'string' ? body : '');
-        this.addEventListener('load', function (this: XMLHttpRequest) {
-          try {
-            post({ transport: 'xhr', url, friendlyName, status: this.status, body: this.responseText ?? '' });
-          } catch {
-            /* ignore */
-          }
-        });
+        const friendlyName = friendlyNameOf(body);
+        if (wanted(friendlyName)) {
+          this.addEventListener('load', function (this: XMLHttpRequest) {
+            try {
+              post({ transport: 'xhr', url, friendlyName, status: this.status, body: this.responseText ?? '' });
+            } catch {
+              /* ignore */
+            }
+          });
+        }
       }
     } catch {
       /* ignore */

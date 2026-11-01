@@ -6,7 +6,7 @@ export function deriveSearchKey(href: string): string {
   try {
     const u = new URL(href);
     const q = u.searchParams.get('query');
-    return (q ?? '').trim().toLowerCase();
+    return (q ?? '').trim().replace(/\s+/g, ' ').toLowerCase(); // "glk  350" is the same search as "glk 350"
   } catch {
     return '';
   }

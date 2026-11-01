@@ -13,11 +13,28 @@ export type PdpFetcher = (id: string) => Promise<PdpResult>;
 export interface EnrichHandlers {
   onPending?: (id: string) => void;
   onResult: (id: string, result: PdpResult) => void;
+  /** The queue stopped itself after repeated failures (see maxConsecutiveFailures). */
+  onHalt?: () => void;
 }
 
 export interface EnrichOptions {
   delayMs?: number;
+  /**
+   * Stop fetching after this many failures in a row (thrown fetch, or a page we
+   * couldn't read). A run of failures means Facebook is refusing or the page format
+   * changed — either way, continuing would only send more requests for nothing.
+   * Rate-limit safety, not evasion: once halted it stays halted until reset().
+   */
+  maxConsecutiveFailures?: number;
+  /**
+   * Source of truth for "already enriched": consulted before every pick, so a
+   * listing enriched some other way (the user opened it, or it was fetched before a
+   * Clear) is never fetched again.
+   */
+  shouldFetch?: (id: string) => boolean;
 }
+
+const DEFAULT_MAX_FAILURES = 5;
 
 const wait = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
@@ -25,6 +42,8 @@ export class EnrichQueue {
   private done = new Set<string>(); // ids already attempted (success or fail) — never refetched
   private order: string[] = []; // the work-list, in priority order
   private running = false;
+  private failStreak = 0;
+  private haltedFlag = false;
 
   constructor(
     private readonly fetcher: PdpFetcher,
@@ -42,22 +61,34 @@ export class EnrichQueue {
   reset(): void {
     this.done.clear();
     this.order = [];
+    this.failStreak = 0;
+    this.haltedFlag = false;
   }
 
-  /** How many of the current work-list still need fetching. */
+  /** True once the failure breaker has tripped; nothing more is fetched until reset(). */
+  get halted(): boolean {
+    return this.haltedFlag;
+  }
+
+  /** How many of the current work-list still need fetching (0 once halted). */
   get pending(): number {
+    if (this.haltedFlag) return 0;
     let n = 0;
-    for (const id of this.order) if (!this.done.has(id)) n++;
+    for (const id of this.order) if (this.wants(id)) n++;
     return n;
   }
 
+  private wants(id: string): boolean {
+    return !this.done.has(id) && (this.opts.shouldFetch?.(id) ?? true);
+  }
+
   private next(): string | undefined {
-    for (const id of this.order) if (!this.done.has(id)) return id;
+    for (const id of this.order) if (this.wants(id)) return id;
     return undefined;
   }
 
   private async run(): Promise<void> {
-    if (this.running) return;
+    if (this.running || this.haltedFlag) return;
     this.running = true;
     try {
       let id: string | undefined;
@@ -65,12 +96,21 @@ export class EnrichQueue {
         this.done.add(id); // mark before fetching so we don't re-pick it mid-flight
         this.handlers.onPending?.(id);
         let result: PdpResult;
+        let failed: boolean;
         try {
           result = await this.fetcher(id);
+          failed = !result.detail;
         } catch {
           result = { id, detail: null, schemaMiss: false }; // a fetch failure ≠ a schema break
+          failed = true;
         }
         this.handlers.onResult(id, result);
+        this.failStreak = failed ? this.failStreak + 1 : 0;
+        if (this.failStreak >= (this.opts.maxConsecutiveFailures ?? DEFAULT_MAX_FAILURES)) {
+          this.haltedFlag = true;
+          this.handlers.onHalt?.();
+          return;
+        }
         // re-check next() each loop so a priority change mid-drain takes effect immediately
         if (this.next() !== undefined && this.opts.delayMs) await wait(this.opts.delayMs);
       }
