@@ -7,7 +7,7 @@ export default defineConfig({
   manifest: {
     name: 'Enshittifighter',
     description: 'Fights Facebook Marketplace enshittification — real filters, real sorting, and the best deals up top.',
-    version: '0.0.3',
+    version: '0.0.4',
     // Narrow: Marketplace only, and chrome.storage for saved searches/filters.
     host_permissions: ['https://www.facebook.com/marketplace/*'],
     permissions: ['storage'],
