@@ -177,3 +177,57 @@ describe('parseVehicleTitle — beyond pickups (real titles from a "glk 350" sea
     expect(parseVehicleTitle('ford f-250 super duty')).toMatchObject({ make: 'ford', model: 'f-250' });
   });
 });
+
+describe('parseVehicleTitle — tricky real-world titles', () => {
+  it.each<[string, string | undefined, string | undefined]>([
+    ['2023 Ford F-150 Lightning Lariat', 'ford', 'f-150'],
+    ['2008 Ford E-350 Super Duty Van', 'ford', 'econoline'],
+    ['2017 Audi A4 allroad Premium', 'audi', 'a4'],
+    ['2016 Audi allroad', 'audi', 'allroad'],
+    ['2021 BMW M340i xDrive', 'bmw', '3 series'],
+    ['2012 BMW 5 Series · 535i xDrive', 'bmw', '5 series'],
+    ['2015 Lexus IS · IS 250 Sedan 4D', 'lexus', 'is'],
+    ['2009 Infiniti G37 Journey', 'infiniti', 'g37'],
+    ['1998 Chevrolet K2500 4x4', 'chevrolet', 'silverado 2500'],
+    ['2019 Chevrolet Silverado 3500HD Dually', 'chevrolet', 'silverado 3500hd'],
+    ['2015 Ram 5500 Chassis Cab', 'ram', 'ram 5500'],
+    ['2018 Toyota 86 GT', 'toyota', '86'],
+    ['2021 Tesla Model Y Long Range', 'tesla', 'model y'],
+    ['2019 Land Rover Range Rover Sport HSE', 'land rover', 'range rover sport'],
+    ['2020 Range Rover Velar', 'land rover', 'range rover velar'],
+    ['2022 Mazda CX-50 Turbo', 'mazda', 'cx-50'],
+    ['2016 Mazda Mazda3 Touring', 'mazda', 'mazda3'],
+    ['2018 Volkswagen Golf R', 'volkswagen', 'golf r'],
+    ['1991 Mercedes-Benz 300 CE', 'mercedes-benz', 'e-class'],
+    ['2016 Mercedes-Benz Sprinter 2500 High Roof', 'mercedes-benz', 'sprinter'],
+    ['2020 Ram ProMaster 2500 High Roof', 'ram', 'promaster'],
+    ['2019 Volvo XC90 T6 Inscription', 'volvo', 'xc90'],
+    ['2005 Saab 9-3 Aero', 'saab', '9-3'],
+    ['2010 Mini Cooper S', 'mini', 'cooper'],
+    ['2014 Jeep Wrangler Unlimited Sahara', 'jeep', 'wrangler'],
+    ['2012 Honda Accord Crosstour', 'honda', 'crosstour'],
+    ['2013 Subaru WRX STI', 'subaru', 'wrx'],
+    ['2015 Camry SE', 'toyota', 'camry'], // make inferred from a distinctive model
+  ])('%s -> %s / %s', (title, make, model) => {
+    const v = parseVehicleTitle(title);
+    expect(v.make).toBe(make);
+    expect(v.model).toBe(model);
+  });
+
+  it('a mileage is not a weight class ("1500 miles")', () => {
+    expect(parseVehicleTitle('2015 Chevrolet Malibu 1500 miles').model).toBe('malibu');
+    expect(parseVehicleTitle('2015 Chevrolet 1500 miles').model).toBeUndefined();
+  });
+
+  it('a short code shared with a trim is not repeated as the trim', () => {
+    const v = parseVehicleTitle('2010 Lexus LS 460');
+    expect(v.model).toBe('ls');
+    expect(v.trim).toBeUndefined();
+  });
+
+  it('ordinary words never imply a make ("Edge", "Journey", "Express")', () => {
+    for (const t of ['2015 Edge Sport', '2012 Journey SXT', '2009 Express 2500 van']) {
+      expect(parseVehicleTitle(t).make).toBeUndefined();
+    }
+  });
+});
