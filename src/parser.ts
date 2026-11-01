@@ -11,40 +11,221 @@ import type { ParsedVehicle, Drivetrain, FuelType, ParseConfidence } from './typ
 
 const CURRENT_YEAR = 2026;
 
-// --- make aliases (folded to canonical) ---
-const MAKE_ALIASES: Record<string, string[]> = {
-  chevrolet: ['chevrolet', 'chevy'],
-  gmc: ['gmc'],
-  ford: ['ford'],
-  ram: ['ram', 'dodge'],
-  toyota: ['toyota'],
-  nissan: ['nissan'],
-  honda: ['honda'],
-  jeep: ['jeep'],
+// --- makes: canonical name -> title spellings. Canonical names follow Facebook's
+// own make names (lowercased) so a title-parsed make and a detail-page make agree.
+const MAKES: [string, string[]][] = [
+  ['chevrolet', ['chevrolet', 'chevy']],
+  ['gmc', ['gmc']],
+  ['ford', ['ford']],
+  ['ram', ['ram']],
+  ['dodge', ['dodge']],
+  ['toyota', ['toyota']],
+  ['nissan', ['nissan']],
+  ['honda', ['honda']],
+  ['jeep', ['jeep']],
+  ['mercedes-benz', ['mercedes-benz', 'mercedes benz', 'mercedes', 'benz']],
+  ['bmw', ['bmw']],
+  ['audi', ['audi']],
+  ['porsche', ['porsche']],
+  ['volvo', ['volvo']],
+  ['lexus', ['lexus']],
+  ['acura', ['acura']],
+  ['infiniti', ['infiniti', 'infinity']],
+  ['cadillac', ['cadillac']],
+  ['buick', ['buick']],
+  ['lincoln', ['lincoln']],
+  ['chrysler', ['chrysler']],
+  ['hyundai', ['hyundai']],
+  ['kia', ['kia']],
+  ['genesis', ['genesis']],
+  ['subaru', ['subaru']],
+  ['mazda', ['mazda']],
+  ['mitsubishi', ['mitsubishi']],
+  ['volkswagen', ['volkswagen', 'vw']],
+  ['tesla', ['tesla']],
+  ['land rover', ['land rover', 'range rover']],
+  ['jaguar', ['jaguar']],
+  ['mini', ['mini cooper', 'mini countryman', 'mini clubman']],
+  ['alfa romeo', ['alfa romeo']],
+  ['fiat', ['fiat']],
+  ['maserati', ['maserati']],
+  ['bentley', ['bentley']],
+  ['ferrari', ['ferrari']],
+  ['lamborghini', ['lamborghini']],
+  ['rolls-royce', ['rolls-royce', 'rolls royce']],
+  ['aston martin', ['aston martin']],
+  ['mclaren', ['mclaren']],
+  ['polestar', ['polestar']],
+  ['rivian', ['rivian']],
+  ['lucid', ['lucid']],
+  ['pontiac', ['pontiac']],
+  ['saturn', ['saturn']],
+  ['scion', ['scion']],
+  ['mercury', ['mercury']],
+  ['hummer', ['hummer']],
+  ['isuzu', ['isuzu']],
+  ['saab', ['saab']],
+  ['suzuki', ['suzuki']],
+];
+
+// --- model families per make. A string is both the title keyword and the
+// canonical model; a [keyword, canonical] pair folds a spelling. In keywords, a
+// space or hyphen also matches "no separator" ("cr-v" matches "crv", "cr v").
+type ModelEntry = string | [string, string];
+const MODELS: Record<string, ModelEntry[]> = {
+  chevrolet: [
+    'silverado', 'colorado', 'tahoe', 'suburban', 'camaro', 'corvette', 'malibu', 'equinox',
+    'traverse', 'impala', 'cruze', 'trailblazer', 'blazer', 'trax', 'avalanche', 'express',
+    ['s10', 's-10'], ['s-10', 's-10'], 'bolt', 'volt', 'sonic', 'spark', 'cobalt', 'hhr', 'monte carlo', 'caprice', 'el camino',
+  ],
+  gmc: ['sierra', 'canyon', 'yukon', 'acadia', 'terrain', 'envoy', 'savana', 'jimmy', 'sonoma', 'hummer ev'],
+  ford: [
+    'ranger', 'mustang', 'explorer', 'expedition', 'escape', 'edge', 'bronco sport', 'bronco',
+    'fusion', 'focus', 'fiesta', 'taurus', 'flex', 'transit connect', 'transit', 'maverick',
+    'econoline', 'excursion', 'crown victoria', 'thunderbird', 'ecosport', 'freestar', 'windstar',
+  ],
+  ram: ['promaster city', 'promaster'],
+  dodge: [
+    'charger', 'challenger', 'durango', 'journey', 'grand caravan', 'caravan', 'dart', 'avenger',
+    'viper', 'nitro', 'dakota', 'magnum', 'neon', 'hornet', 'caliber', 'stratus',
+  ],
+  toyota: [
+    'tundra', 'tacoma', 'camry', 'corolla cross', 'corolla', 'rav4', 'highlander', '4runner', 'sienna',
+    'prius', 'sequoia', 'land cruiser', 'avalon', 'venza', 'c-hr', 'supra', 'fj cruiser', 'yaris',
+    'gr86', 'matrix', 'solara', 'celica', 'grand highlander',
+  ],
+  nissan: [
+    'titan', 'frontier', 'altima', 'maxima', 'sentra', 'versa', 'rogue', 'murano', 'pathfinder',
+    'armada', 'xterra', 'juke', 'kicks', 'leaf', '350z', '370z', 'gt-r', 'quest', 'nv200', 'nv',
+  ],
+  honda: [
+    'civic', 'accord', 'cr-v', 'hr-v', 'pilot', 'odyssey', 'ridgeline', 'fit', 'passport', 'element',
+    'insight', 's2000', 'prelude', 'crosstour', 'cr-z',
+  ],
+  jeep: [
+    'wrangler', 'grand cherokee', 'cherokee', 'compass', 'renegade', 'gladiator', 'patriot', 'liberty',
+    'commander', 'grand wagoneer', 'wagoneer',
+  ],
+  'mercedes-benz': [
+    'sprinter', 'metris', 'amg gt', ['g wagon', 'g-class'], ['gwagon', 'g-class'], 'eqs', 'eqe', 'eqb', 'maybach',
+  ],
+  bmw: [],
+  audi: ['allroad', 'e-tron gt', 'e-tron', 'tt', 'r8'],
+  porsche: ['911', '718', 'cayenne', 'macan', 'panamera', 'boxster', 'cayman', 'taycan'],
+  volvo: [],
+  lexus: [],
+  acura: ['mdx', 'rdx', 'tlx', 'ilx', 'tsx', 'rlx', 'zdx', 'rsx', 'nsx', 'integra', 'tl', 'rl'],
+  infiniti: [],
+  cadillac: [
+    'escalade', 'cts', 'ats', 'xts', 'srx', 'xt4', 'xt5', 'xt6', 'ct4', 'ct5', 'ct6', 'dts', 'sts',
+    'deville', 'lyriq', 'eldorado',
+  ],
+  buick: ['enclave', 'encore', 'envision', 'lacrosse', 'regal', 'lucerne', 'verano', 'rainier', 'rendezvous'],
+  lincoln: [
+    'navigator', 'aviator', 'nautilus', 'corsair', 'mkz', 'mkx', 'mkc', 'mkt', 'town car', 'continental',
+  ],
+  chrysler: ['pacifica', ['town & country', 'town and country'], 'town and country', 'pt cruiser', 'sebring', 'voyager', '300', '200'],
+  hyundai: [
+    'elantra', 'sonata', 'tucson', 'santa fe', 'santa cruz', 'palisade', 'kona', 'accent', 'veloster',
+    'ioniq 5', 'ioniq 6', 'ioniq', 'venue', 'azera', 'genesis',
+  ],
+  kia: [
+    'optima', 'k5', 'sorento', 'sportage', 'telluride', 'soul', 'forte', 'rio', 'stinger', 'carnival',
+    'sedona', 'niro', 'ev6', 'ev9', 'seltos',
+  ],
+  genesis: ['gv60', 'gv70', 'gv80', 'g70', 'g80', 'g90'],
+  subaru: ['outback', 'forester', 'crosstrek', 'impreza', 'wrx', 'legacy', 'ascent', 'brz', 'baja'],
+  mazda: ['cx-30', 'cx-3', 'cx-50', 'cx-5', 'cx-90', 'cx-9', ['miata', 'mx-5'], 'mx-5', 'rx-8', 'tribute', ['mazda3', 'mazda3'], ['mazda 3', 'mazda3'], ['mazda6', 'mazda6'], ['mazda 6', 'mazda6']],
+  mitsubishi: ['eclipse cross', 'outlander sport', 'outlander', 'eclipse', 'lancer', 'mirage', 'galant', 'montero'],
+  volkswagen: ['jetta', 'passat', 'golf', 'gti', 'tiguan', 'atlas', 'beetle', 'touareg', 'arteon', 'taos', 'id.4', 'cc'],
+  tesla: [['model 3', 'model 3'], ['model s', 'model s'], ['model x', 'model x'], ['model y', 'model y'], 'cybertruck'],
+  'land rover': [
+    'range rover sport', 'range rover evoque', 'range rover velar', 'range rover', 'defender',
+    'discovery sport', 'discovery', 'lr4', 'lr3', 'lr2',
+  ],
+  jaguar: ['f-pace', 'e-pace', 'i-pace', 'f-type', 'xf', 'xj', 'xe', 'xk', 's-type', 'x-type'],
+  mini: ['countryman', 'clubman', 'cooper'],
+  'alfa romeo': ['giulia', 'stelvio', 'tonale'],
+  fiat: ['500x', '500l', '500'],
+  maserati: ['ghibli', 'levante', 'quattroporte', 'granturismo'],
+  pontiac: ['grand prix', 'firebird', 'trans am', 'solstice', 'vibe', 'gto', 'g6', 'g8'],
+  scion: ['fr-s', 'tc', 'xb', 'xd'],
+  hummer: ['h1', 'h2', 'h3'],
 };
 
-// --- model families that also imply a make (e.g. "silverado" -> chevrolet) ---
+// Families whose name alone is distinctive enough to imply the make when the
+// title never names it ("2006 Silverado 2500hd" -> chevrolet). Short or common-word
+// names (edge, focus, express, pilot…) only count when the make is in the title.
+const NO_INFER = new Set([
+  'express', 'legacy', 'escape', 'focus', 'flex', 'journey', 'compass', 'pilot', 'liberty', 'element',
+  'insight', 'passport', 'commander', 'venue', 'nitro', 'magnum', 'sonic', 'spark', 'matrix', 'cooper',
+  'eclipse', 'mirage', 'envoy', 'terrain', 'avenger', 'quest', 'ascent', 'genesis', 'defender', 'discovery',
+  'continental', 'regal', 'encore', 'envision', 'aviator', 'corsair', 'nautilus', 'voyager', 'carnival',
+  'fiesta', 'taurus', 'atlas', 'charger', 'transit', 'maverick', 'accent', 'stinger', 'dakota', 'jimmy',
+  'caliber', 'hornet', 'element', 'vibe', 'solstice', 'saturn', 'outlander', 'tribute', 'freestar',
+  'rendezvous', 'impala', 'cobalt', 'caprice', 'neon', 'viper', 'sprinter',
+]);
+
+const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// keyword -> regex source where a space/hyphen also matches nothing
+const kwSource = (kw: string): string => escapeRe(kw).replace(/[-\s]+/g, '[-\\s]?');
+
 interface Family {
-  kw: string;
   make: string;
+  model: string;
+  re: RegExp;
+  inferable: boolean;
   weightClass?: boolean; // takes a 1500/2500/3500 class + optional hd
 }
-const FAMILIES: Family[] = [
-  { kw: 'silverado', make: 'chevrolet', weightClass: true },
-  { kw: 'sierra', make: 'gmc', weightClass: true },
-  { kw: 'colorado', make: 'chevrolet' },
-  { kw: 'tahoe', make: 'chevrolet' },
-  { kw: 'suburban', make: 'chevrolet' },
-  { kw: 'canyon', make: 'gmc' },
-  { kw: 'tundra', make: 'toyota' },
-  { kw: 'tacoma', make: 'toyota' },
-  { kw: 'titan', make: 'nissan' },
-  { kw: 'frontier', make: 'nissan' },
-  { kw: 'ranger', make: 'ford' },
-  { kw: 'civic', make: 'honda' },
-  { kw: 'accord', make: 'honda' },
-  { kw: 'wrangler', make: 'jeep' },
-];
+const WEIGHT_CLASS_FAMILIES = new Set(['silverado', 'sierra']);
+
+function buildFamilies(): Record<string, Family[]> {
+  const out: Record<string, Family[]> = {};
+  for (const [make, entries] of Object.entries(MODELS)) {
+    const fams = entries.map((e): Family => {
+      const [kw, model] = typeof e === 'string' ? [e, e] : e;
+      return {
+        make,
+        model,
+        re: new RegExp(`(?<![a-z0-9])${kwSource(kw)}(?![a-z0-9])`),
+        inferable: /^[a-z ]{5,}$/.test(kw) && !NO_INFER.has(kw),
+        weightClass: WEIGHT_CLASS_FAMILIES.has(model),
+      };
+    });
+    // longest keyword first, so "grand cherokee" beats "cherokee"
+    out[make] = fams.sort((a, b) => b.re.source.length - a.re.source.length);
+  }
+  return out;
+}
+const FAMILIES = buildFamilies();
+const INFERABLE: Family[] = Object.values(FAMILIES).flat().filter((f) => f.inferable);
+
+// --- pattern-named lineups (letters + number), only tried once the make is known ---
+const MB_CODES = 'glk|glc|gle|gls|gla|glb|gl|cla|cls|clk|cl|slk|slc|sl|ml|[abcegmrs]';
+const MB_NUMBERED = new RegExp(`\\b(${MB_CODES})\\s?-?\\s?\\d{2,3}(?!\\d)`);
+const MB_CLASS = new RegExp(`\\b(${MB_CODES})[-\\s]?class\\b`);
+const MB_BARE = /\b(glk|glc|gle|gls|gla|glb|gl|cla|cls|clk|slk|slc|sl|ml)\b/;
+function mercedesModel(code: string): string {
+  if (code === 'ml') return 'm-class';
+  return code.length === 1 ? `${code}-class` : code;
+}
+
+const PATTERNS: Record<string, (t: string) => string | undefined> = {
+  'mercedes-benz': (t) => {
+    const m = t.match(MB_NUMBERED) ?? t.match(MB_CLASS) ?? t.match(MB_BARE);
+    return m?.[1] ? mercedesModel(m[1]) : undefined;
+  },
+  bmw: (t) => {
+    let m = t.match(/\b([1-8])[-\s]?series\b/) ?? t.match(/\bm?([1-8])\d{2}(?:i|d|xi|ci|li|is|e|xd)\b/);
+    if (m?.[1]) return `${m[1]} series`;
+    m = t.match(/\b(x[1-7]|z[348]|m[2-8]|i[3478x])\b/);
+    return m?.[1];
+  },
+  audi: (t) => t.match(/\b(a[3-8]|s[3-8]|rs\s?[3-7]|q[2-8]|sq[5-8])\b/)?.[1]?.replace(/\s/g, ''),
+  volvo: (t) => t.match(/\b(xc\d{2}|[svc]\d{2})\b/)?.[1],
+  lexus: (t) => t.match(/\b(rx|gx|lx|nx|ux|es|is|gs|ls|rc|lc|ct|hs|sc)\s?-?\d{3}[hl]?\b/)?.[1] ?? t.match(/\b(rx|gx|lx|nx|ux)\b/)?.[1],
+  infiniti: (t) => t.match(/\b(qx\d{2}|q\d{2}|g3[57]|fx\d{2}|ex35|jx35|m3[57]|m45|m56)\b/)?.[1],
+};
 
 // trims, longest-first so "ltz" beats "lt" and "laramie longhorn" beats "laramie"
 const TRIMS: string[] = [
@@ -67,8 +248,15 @@ const BODY_ALIASES: Record<string, string> = {
   'super crew': 'supercrew',
 };
 
-const has = (t: string, kw: string): boolean =>
-  new RegExp(`\\b${kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(t);
+const HAS_CACHE = new Map<string, RegExp>();
+const has = (t: string, kw: string): boolean => {
+  let re = HAS_CACHE.get(kw);
+  if (!re) {
+    re = new RegExp(`\\b${escapeRe(kw)}\\b`);
+    HAS_CACHE.set(kw, re);
+  }
+  return re.test(t);
+};
 
 function extractYear(t: string): number | undefined {
   const m = t.match(/\b(19[0-9]\d|20[0-4]\d)\b/g);
@@ -117,12 +305,25 @@ function firstMatch(t: string, list: string[], aliases: Record<string, string>):
   return undefined;
 }
 
+const MAKE_RES: [string, RegExp][] = MAKES.flatMap(([make, aliases]) =>
+  aliases.map((a): [string, RegExp] => [make, new RegExp(`(?<![a-z0-9])${escapeRe(a)}(?![a-z0-9])`)]),
+);
+
+// The make named EARLIEST in the title wins ("2012 Hyundai Genesis" -> hyundai).
 function detectMake(t: string): string | undefined {
-  for (const make of Object.keys(MAKE_ALIASES)) {
-    const aliases = MAKE_ALIASES[make];
-    if (aliases && aliases.some((a) => has(t, a))) return make;
+  let best: string | undefined;
+  let bestAt = Infinity;
+  for (const [make, re] of MAKE_RES) {
+    const m = re.exec(t);
+    if (m && m.index < bestAt) {
+      best = make;
+      bestAt = m.index;
+    }
   }
-  return undefined;
+  // pre-2010 Ram pickups were sold as "Dodge Ram" — fold those into ram,
+  // but leave Dodge's cars (Charger, Durango…) as dodge.
+  if (best === 'dodge' && (/\bram\b/.test(t) || /\b[123]500(?!\d)/.test(t))) return 'ram';
+  return best;
 }
 
 // weight class for pickups: "2500", "2500 hd", "2500hd" -> { cls:"2500", hd:true }
@@ -143,30 +344,46 @@ interface ModelResult {
   modelInferred: boolean;
 }
 
-function detectModel(t: string, make: string | undefined): ModelResult | undefined {
-  // 1) explicit family keyword (also implies a make)
-  const fam = FAMILIES.find((f) => has(t, f.kw));
-  if (fam) {
-    if (fam.weightClass) {
-      const wc = detectWeightClass(t);
-      const model = wc ? `${fam.kw} ${wc.cls}${wc.hd ? 'hd' : ''}` : fam.kw;
-      return { model, makeFromModel: fam.make, modelInferred: false };
-    }
-    return { model: fam.kw, makeFromModel: fam.make, modelInferred: false };
-  }
-
-  // 2) Ford F-series: "f-150", "f250", "f 350"
-  const fseries = t.match(/\bf[-\s]?([123])50\b/);
-  if (fseries) return { model: `f-${fseries[1]}50`, makeFromModel: 'ford', modelInferred: false };
-
-  // 3) bare weight class + a known make -> infer the family model
+function familyModel(fam: Family, t: string): string {
+  if (!fam.weightClass) return fam.model;
   const wc = detectWeightClass(t);
-  if (wc) {
-    const eff = make ?? detectMake(t);
-    if (eff === 'chevrolet') return { model: `silverado ${wc.cls}${wc.hd ? 'hd' : ''}`, modelInferred: true };
-    if (eff === 'gmc') return { model: `sierra ${wc.cls}${wc.hd ? 'hd' : ''}`, modelInferred: true };
-    if (eff === 'ram') return { model: `ram ${wc.cls}${wc.hd ? 'hd' : ''}`, modelInferred: true };
+  return wc ? `${fam.model} ${wc.cls}${wc.hd ? 'hd' : ''}` : fam.model;
+}
+
+const FSERIES = /\bf[-\s]?([1-7])50\b/;
+
+function detectModel(t: string, make: string | undefined): ModelResult | undefined {
+  if (make) {
+    // 1) a family keyword of THIS make
+    const fam = (FAMILIES[make] ?? []).find((f) => f.re.test(t));
+    if (fam) return { model: familyModel(fam, t), modelInferred: false };
+
+    // 2) lineups named by pattern (Mercedes "GLK 350", BMW "328i", Audi "Q5"…)
+    const pat = PATTERNS[make]?.(t);
+    if (pat) return { model: pat, modelInferred: false };
+
+    // 3) Ford F-series: "f-150", "f250", "f 350"
+    if (make === 'ford') {
+      const fs = t.match(FSERIES);
+      if (fs) return { model: `f-${fs[1]}50`, modelInferred: false };
+    }
+
+    // 4) bare weight class + a truck make -> infer the family model
+    const wc = detectWeightClass(t);
+    if (wc) {
+      const hd = wc.hd ? 'hd' : '';
+      if (make === 'chevrolet') return { model: `silverado ${wc.cls}${hd}`, modelInferred: true };
+      if (make === 'gmc') return { model: `sierra ${wc.cls}${hd}`, modelInferred: true };
+      if (make === 'ram') return { model: `ram ${wc.cls}${hd}`, modelInferred: true };
+    }
+    return undefined;
   }
+
+  // No make in the title: only distinctive model names may imply one.
+  const fam = INFERABLE.find((f) => f.re.test(t));
+  if (fam) return { model: familyModel(fam, t), makeFromModel: fam.make, modelInferred: false };
+  const fs = t.match(FSERIES);
+  if (fs) return { model: `f-${fs[1]}50`, makeFromModel: 'ford', modelInferred: false };
   return undefined;
 }
 
