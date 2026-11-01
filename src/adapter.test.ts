@@ -1,15 +1,15 @@
-import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { extractListings, parseMilesText } from './adapter';
+import { describeWithFixtures, itWithFixtures, readFixture } from './_fixtures';
 
-// Real Phase-0 fixtures live in /fixtures (gitignored — present locally).
-const FIX = join(dirname(fileURLToPath(import.meta.url)), '..', 'fixtures');
-const read = (f: string): string => readFileSync(join(FIX, f), 'utf8');
+// Real Phase-0 fixtures live in /fixtures (gitignored — present locally, absent on a fresh clone,
+// where the suites that read them are skipped). See _fixtures.ts.
 
-describe('extractListings — initial search container fixture', () => {
-  const r = extractListings(read('search-content-container.json'), 'silverado 2500');
+describeWithFixtures(['search-content-container.json'], 'extractListings — initial search container fixture', () => {
+  let r: ReturnType<typeof extractListings>;
+  beforeAll(() => {
+    r = extractListings(readFixture('search-content-container.json'), 'silverado 2500');
+  });
 
   it('extracts every organic listing, no schema miss', () => {
     expect(r.schemaMiss).toBe(false);
@@ -49,8 +49,11 @@ describe('extractListings — initial search container fixture', () => {
   });
 });
 
-describe('extractListings — chunked pagination fixture with ad units', () => {
-  const r = extractListings(read('search-content-pagination-chunked.json'), 'silverado 2500');
+describeWithFixtures(['search-content-pagination-chunked.json'], 'extractListings — chunked pagination fixture with ad units', () => {
+  let r: ReturnType<typeof extractListings>;
+  beforeAll(() => {
+    r = extractListings(readFixture('search-content-pagination-chunked.json'), 'silverado 2500');
+  });
 
   it('parses the multi-chunk response and skips ad units (tallying them)', () => {
     expect(r.schemaMiss).toBe(false);
@@ -61,8 +64,8 @@ describe('extractListings — chunked pagination fixture with ad units', () => {
 });
 
 describe('extractListings — fail-loud vs empty', () => {
-  it('a response with no listing container is a schema miss, not empty', () => {
-    const r = extractListings(read('search-root.json'), 'silverado 2500');
+  itWithFixtures(['search-root.json'], 'a response with no listing container is a schema miss, not empty', () => {
+    const r = extractListings(readFixture('search-root.json'), 'silverado 2500');
     expect(r.schemaMiss).toBe(true);
     expect(r.listings).toHaveLength(0);
   });

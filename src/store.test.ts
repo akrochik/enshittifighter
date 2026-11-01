@@ -1,16 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
 import { Pool } from './store';
 import { extractListings } from './adapter';
+import { describeWithFixtures, itWithFixtures, readFixture } from './_fixtures';
 
-const FIX = join(dirname(fileURLToPath(import.meta.url)), '..', 'fixtures');
-const read = (f: string): string => readFileSync(join(FIX, f), 'utf8');
+// Real capture, gitignored: absent on a fresh clone, where the tests that read it are skipped.
+// See _fixtures.ts.
+const CONTAINER = 'search-content-container.json';
 const listings = (): ReturnType<typeof extractListings>['listings'] =>
-  extractListings(read('search-content-container.json'), 'silverado 2500').listings;
+  extractListings(readFixture(CONTAINER), 'silverado 2500').listings;
 
-describe('Pool — accumulate + dedup', () => {
+describeWithFixtures([CONTAINER], 'Pool — accumulate + dedup', () => {
   it('accumulates listings and dedups by id', () => {
     const p = new Pool();
     p.setSearch('silverado 2500');
@@ -21,7 +20,7 @@ describe('Pool — accumulate + dedup', () => {
   });
 });
 
-describe('Pool — clear on new search (pool scoping)', () => {
+describeWithFixtures([CONTAINER], 'Pool — clear on new search (pool scoping)', () => {
   it('clears when the search query changes', () => {
     const p = new Pool();
     p.setSearch('silverado 2500');
@@ -42,7 +41,7 @@ describe('Pool — clear on new search (pool scoping)', () => {
 });
 
 describe('Pool — enrichment merge', () => {
-  it('merges detail, marks enriched, and survives a re-add', () => {
+  itWithFixtures([CONTAINER], 'merges detail, marks enriched, and survives a re-add', () => {
     const p = new Pool();
     p.setSearch('silverado 2500');
     p.add(listings());
@@ -64,7 +63,7 @@ describe('Pool — enrichment merge', () => {
     expect(p.enrich('999', { fuel: 'gas' })).toBe(false);
   });
 
-  it('pendingEnrichment lists only un-fetched listings', () => {
+  itWithFixtures([CONTAINER], 'pendingEnrichment lists only un-fetched listings', () => {
     const p = new Pool();
     p.setSearch('silverado 2500');
     p.add(listings());

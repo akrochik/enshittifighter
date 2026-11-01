@@ -1,14 +1,15 @@
-import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { extractVehicleDetail, extractVehicleDetailFromHtml } from './pdpAdapter';
+import { describeWithFixtures, itWithFixtures, readFixture } from './_fixtures';
 
-const FIX = join(dirname(fileURLToPath(import.meta.url)), '..', 'fixtures');
-const read = (f: string): string => readFileSync(join(FIX, f), 'utf8');
+// The pdp-vehicle-* / feed fixtures are gitignored real captures: absent on a fresh clone, where
+// the suites that read them are skipped. See _fixtures.ts.
 
-describe('extractVehicleDetail — 2013 Ford F150 (pdp-vehicle-1)', () => {
-  const r = extractVehicleDetail(read('pdp-vehicle-1.json'));
+describeWithFixtures(['pdp-vehicle-1.json'], 'extractVehicleDetail — 2013 Ford F150 (pdp-vehicle-1)', () => {
+  let r: ReturnType<typeof extractVehicleDetail>;
+  beforeAll(() => {
+    r = extractVehicleDetail(readFixture('pdp-vehicle-1.json'));
+  });
 
   it('pulls the structured vehicle fields', () => {
     expect(r.schemaMiss).toBe(false);
@@ -26,8 +27,11 @@ describe('extractVehicleDetail — 2013 Ford F150 (pdp-vehicle-1)', () => {
   });
 });
 
-describe('extractVehicleDetail — 1995 Ford F150 (pdp-vehicle-2)', () => {
-  const r = extractVehicleDetail(read('pdp-vehicle-2.json'));
+describeWithFixtures(['pdp-vehicle-2.json'], 'extractVehicleDetail — 1995 Ford F150 (pdp-vehicle-2)', () => {
+  let r: ReturnType<typeof extractVehicleDetail>;
+  beforeAll(() => {
+    r = extractVehicleDetail(readFixture('pdp-vehicle-2.json'));
+  });
 
   it('pulls fields the seller filled, omits the ones left blank', () => {
     const d = r.detail!;
@@ -44,8 +48,8 @@ describe('extractVehicleDetail — 1995 Ford F150 (pdp-vehicle-2)', () => {
 });
 
 describe('extractVehicleDetail — wrong/absent response', () => {
-  it('a feed response (no PDP target) is a schema miss', () => {
-    const r = extractVehicleDetail(read('search-content-container.json'));
+  itWithFixtures(['search-content-container.json'], 'a feed response (no PDP target) is a schema miss', () => {
+    const r = extractVehicleDetail(readFixture('search-content-container.json'));
     expect(r.schemaMiss).toBe(true);
     expect(r.detail).toBeNull();
   });
