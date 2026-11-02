@@ -11,6 +11,10 @@ export async function mountSidebar(ctx: ContentScriptContext, store: UiStore, ac
     position: 'inline',
     anchor: 'body',
     append: 'last',
+    // Keystrokes in our inputs would otherwise bubble out of the shadow root looking
+    // like they came from a non-input element, so Facebook's single-key shortcuts
+    // could fire while the user types a price. Stop key events at the boundary.
+    isolateEvents: true,
     onMount(container) {
       const root = ReactDOM.createRoot(container);
       root.render(<App store={store} actions={actions} />);

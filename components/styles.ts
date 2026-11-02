@@ -9,56 +9,86 @@ export const PANEL_CSS = `
   --deal:#54C48D; --warn:#E7A94C; --danger:#ED6A5A;
   --ui:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
   --mono:"Cascadia Code",Consolas,"SFMono-Regular",Menlo,monospace;
+  /* Facebook's own top bar (search, Messenger, notifications, account) is 56px:
+     start below it so the panel never covers it. */
+  --top:56px;
+  --rail:252px;
 }
 *{box-sizing:border-box}
 button{font-family:var(--ui);cursor:pointer}
-button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 
-.sift{position:fixed;top:0;right:0;bottom:0;display:flex;flex-direction:column;font-family:var(--ui);color:var(--ink);
+.sift{position:fixed;top:var(--top);right:0;bottom:0;display:flex;flex-direction:column;font-family:var(--ui);color:var(--ink);color-scheme:dark;container-type:inline-size;
   background:var(--panel);border-left:1px solid var(--line);box-shadow:-18px 0 50px rgba(0,0,0,.45);z-index:2147483647}
 .rz{position:absolute;left:0;top:0;bottom:0;width:8px;cursor:ew-resize;z-index:5}
 .rz::before{content:"";position:absolute;left:3px;top:50%;transform:translateY(-50%);width:2px;height:30px;border-radius:2px;background:var(--line2)}
 .rz:hover::before{background:var(--accent);height:44px}
 .rz-overlay{position:fixed;inset:0;z-index:2147483646;cursor:ew-resize}
 
-.head{display:flex;align-items:center;gap:8px;padding:11px 14px;border-bottom:1px solid var(--line);background:linear-gradient(var(--panel2),var(--panel))}
-.brand{display:flex;align-items:center;gap:9px;font-weight:680}
+/* --- pinned top: header, status, sort --- */
+.head{flex:none;display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line);background:linear-gradient(var(--panel2),var(--panel))}
+.brand{display:flex;align-items:center;gap:9px;font-weight:680;white-space:nowrap}
+.head>*{flex:none}
+/* a narrow panel can't fit the name beside the controls: keep the mark only */
+@container (max-width:460px){.brand .name{display:none}}
 .mark{width:22px;height:22px;border-radius:6px;background:linear-gradient(135deg,var(--accent),var(--accent-deep));display:grid;place-items:center;color:var(--accent-ink);font:800 13px/1 var(--mono)}
-.count{margin-left:auto;font:600 12px/1 var(--mono);color:var(--muted);background:var(--panel3);border:1px solid var(--line);border-radius:20px;padding:6px 10px}
+.count{margin-left:auto;font:600 12px/1 var(--mono);color:var(--muted);background:var(--panel3);border:1px solid var(--line);border-radius:20px;padding:6px 10px;white-space:nowrap}
 .count b{color:var(--accent)}
-.hbtn{font:600 11px var(--ui);padding:6px 10px;border-radius:7px;background:var(--panel3);border:1px solid var(--line2);color:var(--muted)}
+.hbtn{display:inline-flex;align-items:center;gap:6px;font:600 11px var(--ui);padding:6px 10px;border-radius:7px;background:var(--panel3);border:1px solid var(--line2);color:var(--muted)}
 .hbtn:hover{color:var(--ink);border-color:var(--muted)}
 .hbtn.on{background:rgba(39,182,214,.16);border-color:var(--accent);color:#c3eef7}
+.nbadge{min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--accent);color:var(--accent-ink);font:700 10px/16px var(--mono);text-align:center}
 .icon{width:30px;height:30px;display:grid;place-items:center;border-radius:7px;color:var(--muted);background:transparent;border:1px solid transparent;font-size:16px}
 .icon:hover{background:var(--panel3);color:var(--ink)}
 
-.ctx{padding:9px 14px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--line);background:#12161d}
+.ctx{flex:none;display:flex;align-items:center;gap:6px 12px;flex-wrap:wrap;padding:8px 14px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--line);background:#12161d}
 .ctx b{color:var(--ink)}
-.enrich{padding:7px 14px;font-size:11.5px;color:var(--accent);background:rgba(39,182,214,.07);border-bottom:1px solid var(--line)}
-.enrich.halted{color:var(--warn);background:rgba(231,169,76,.08)}
+.ctx .enrich{margin-left:auto;font-size:11.5px;color:var(--accent)}
+.halted{flex:none;padding:7px 14px;font-size:11.5px;color:var(--warn);background:rgba(231,169,76,.08);border-bottom:1px solid var(--line)}
 
-.sortbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:9px 14px;border-bottom:1px solid var(--line);background:#12161d}
-.sortbar .flabel{margin-right:2px}
-.sizer{margin-left:auto;display:flex;align-items:center;gap:6px}
-.sizer input[type=range]{width:104px;accent-color:var(--accent);cursor:pointer}
+.sortbar{flex:none;display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 14px;border-bottom:1px solid var(--line);background:#12161d}
+.sel{background:var(--panel2);border:1px solid var(--line2);border-radius:7px;color:var(--ink);font:600 12.5px var(--ui);padding:5px 8px;cursor:pointer}
+.sel:hover{border-color:var(--muted)}
+.sel option{background:var(--panel2);color:var(--ink)}
+.sizer{margin-left:auto;display:flex;align-items:center;gap:8px}
+.sizer input[type=range]{width:96px;accent-color:var(--accent);cursor:pointer}
 
-.scroll{flex:1;overflow-y:auto;overflow-x:hidden}
-.scroll::-webkit-scrollbar{width:9px}
-.scroll::-webkit-scrollbar-thumb{background:var(--line);border-radius:20px;border:2px solid var(--panel)}
+.activebar{flex:none;display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:8px 14px;border-bottom:1px solid var(--line);background:#12161d}
+.pill{display:inline-flex;align-items:center;gap:6px;font:600 11.5px var(--ui);padding:4px 7px 4px 9px;border-radius:20px;background:rgba(39,182,214,.13);border:1px solid rgba(39,182,214,.45);color:#c3eef7}
+.pill:hover{border-color:var(--accent);background:rgba(39,182,214,.22)}
+.pill .x{font-size:9px;opacity:.7}
 
-.filters{padding:12px 14px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:11px}
+/* --- filters + results. Wide panel: filters get a column of their own, always
+   in view and scrolling independently. Narrow: they sit pinned above the
+   results with a capped height. Either way they never scroll away. --- */
+.main{flex:1;min-height:0;display:flex;flex-direction:column}
+.sift.wide .main{flex-direction:row}
+.rail{flex:none;overflow-y:auto;overflow-x:hidden;border-bottom:1px solid var(--line);background:#141922;overscroll-behavior:contain}
+.sift:not(.wide) .rail{max-height:42%}
+.sift.wide .rail{width:var(--rail);border-bottom:none;border-right:1px solid var(--line)}
+.scroll{flex:1;min-height:0;min-width:0;overflow-y:auto;overflow-x:hidden}
+.scroll::-webkit-scrollbar,.rail::-webkit-scrollbar{width:9px}
+.scroll::-webkit-scrollbar-thumb,.rail::-webkit-scrollbar-thumb{background:var(--line);border-radius:20px;border:2px solid var(--panel)}
+
+.filters{padding:12px 14px 14px;display:flex;flex-direction:column;gap:12px}
+.fhead{display:flex;align-items:center;justify-content:space-between;min-height:14px}
 .frow{display:flex;flex-direction:column;gap:6px}
 .flabel{font:600 10.5px/1 var(--ui);letter-spacing:.11em;text-transform:uppercase;color:var(--faint)}
 .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:11px 14px}
+.sift.wide .grid2{grid-template-columns:1fr}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
-.chip{font-size:12.5px;font-weight:550;background:var(--panel3);border:1px solid var(--line2);border-radius:7px;padding:5px 9px;color:var(--ink)}
+.chip{display:inline-flex;align-items:baseline;gap:5px;font-size:12.5px;font-weight:550;background:var(--panel3);border:1px solid var(--line2);border-radius:7px;padding:5px 9px;color:var(--ink)}
 .chip:hover{border-color:var(--muted)}
 .chip.on{background:rgba(39,182,214,.16);border-color:var(--accent);color:#c3eef7}
+.chip .n{font:600 10.5px var(--mono);color:var(--faint)}
+.chip.on .n{color:#8fd9ea}
 .range{display:flex;align-items:center;gap:8px}
 .range span{color:var(--faint)}
 .inp{background:var(--panel2);border:1px solid var(--line2);border-radius:7px;padding:7px 9px;color:var(--ink);font:600 13px var(--mono);width:100%;min-width:0}
 .inp::placeholder{color:var(--faint);font-weight:400}
+.inp.bad{border-color:var(--danger);background:rgba(237,106,90,.08)}
 .toggles{display:flex;flex-wrap:wrap;gap:12px 22px;padding-top:11px;border-top:1px solid var(--line)}
+.sift.wide .toggles{flex-direction:column;gap:11px}
 .toggle{display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--ink);background:none;border:none;padding:0;text-align:left}
 .toggle.off{color:var(--muted)}
 .sw{width:34px;height:19px;border-radius:20px;background:var(--accent);position:relative;flex:none;transition:.15s}
@@ -74,7 +104,8 @@ button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid var(-
 .banner.empty{background:var(--panel2);border:1px solid var(--line2)}
 .banner.empty>b{display:block}
 
-.results{list-style:none;margin:0;padding:10px 12px 16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:11px;align-content:start}
+.results{list-style:none;margin:0;padding:10px 12px 8px;display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:11px;align-content:start}
+.footer{padding:6px 14px 18px;font-size:11.5px;color:var(--faint);text-align:center}
 .card{position:relative;display:flex;flex-direction:column;background:var(--panel2);border:1px solid var(--line);border-radius:12px;overflow:hidden}
 .card:hover{border-color:var(--line2)}
 .card.unparsed{border-left:3px solid var(--warn)}
@@ -85,7 +116,7 @@ button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid var(-
 .card.seen .thumb img{filter:brightness(.5)}
 .card.hidden{opacity:.5}
 .hidebtn{position:absolute;top:6px;right:6px;z-index:3;width:24px;height:24px;display:grid;place-items:center;border-radius:6px;background:rgba(8,12,17,.72);border:1px solid rgba(255,255,255,.14);color:#dbe2ea;font-size:12px;opacity:0;transition:.12s}
-.card:hover .hidebtn,.card.hidden .hidebtn{opacity:1}
+.card:hover .hidebtn,.card.hidden .hidebtn,.card:focus-within .hidebtn{opacity:1}
 .hidebtn:hover{background:var(--danger);color:#fff;border-color:transparent}
 .hiddenbar{display:flex;align-items:center;gap:10px;padding:8px 14px 0;font-size:11.5px;color:var(--faint)}
 .linkbtn{background:none;border:none;color:var(--accent);font:600 11.5px var(--ui);cursor:pointer;padding:0}
@@ -99,6 +130,7 @@ button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid var(-
 .title:hover{text-decoration:underline}
 .facets{display:flex;flex-wrap:wrap;gap:4px}
 .facet{font:600 10.5px/1 var(--mono);color:var(--muted);background:#141922;border:1px solid var(--line);border-radius:5px;padding:3px 5px}
+.facet.unk{color:var(--faint);background:transparent;border-style:dashed}
 .flag{font-size:11px;color:var(--warn)}
 .dealrow{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
 .dealb{font:700 9px/1 var(--ui);letter-spacing:.03em;padding:3px 6px;border-radius:5px}
@@ -112,7 +144,7 @@ button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid var(-
 .miles{font:600 11px/1 var(--mono);color:var(--muted)}
 .loc{margin-left:auto;font-size:11px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:45%}
 
-.reopen{position:fixed;top:16px;right:0;display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-right:none;border-radius:10px 0 0 10px;padding:10px 12px;box-shadow:-8px 0 24px rgba(0,0,0,.35);z-index:2147483647;color:var(--ink)}
+.reopen{position:fixed;top:calc(var(--top) + 16px);right:0;display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-right:none;border-radius:10px 0 0 10px;padding:10px 12px;box-shadow:-8px 0 24px rgba(0,0,0,.35);z-index:2147483647;color:var(--ink)}
 .reopen .mark{width:20px;height:20px}
 .reopen b{color:var(--accent);font:700 12px var(--mono)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
