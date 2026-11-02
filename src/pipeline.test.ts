@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { Pool } from './store';
 import { ingestCapture } from './pipeline';
 import { selectView } from './view';
+import { dealFor } from './deal';
 import { mkListing } from './_testkit';
 import { describeWithFixtures, itWithFixtures, readFixture } from './_fixtures';
 import type { Captured } from './capture/types';
@@ -71,7 +72,11 @@ describeWithFixtures([CONTAINER], 'selectView — end to end from the pool', () 
     const all = selectView(pool.all());
     expect(all.poolCount).toBe(15);
     expect(all.matchCount).toBe(15);
-    expect(all.listings.every((l) => l.deal !== null)).toBe(true); // 15 peers -> every listing scored
+    // Each listing is rated against its own model class (2500HDs vs 2500HDs, never vs 1500s);
+    // one with too few comparable listings is unrated (null = unknown), not "fair".
+    const raw = pool.all();
+    for (const l of all.listings) expect(l.deal).toEqual(dealFor(raw.find((r) => r.id === l.id)!, raw));
+    expect(all.listings.some((l) => l.deal !== null)).toBe(true);
 
     // a price ceiling narrows the match count but the pool stays whole
     const filtered = selectView(pool.all(), { priceMax: 12000 });
