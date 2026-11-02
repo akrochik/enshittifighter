@@ -79,6 +79,25 @@ export class Pool {
     return true;
   }
 
+  /**
+   * Seed details remembered from an earlier page load. Never overrides what this
+   * page already learned; a pooled listing still waiting for its fetch gets the
+   * detail now and is never fetched.
+   */
+  remember(entries: Iterable<[string, VehicleDetail]>): void {
+    for (const [id, detail] of entries) {
+      if (this.attempts.has(id)) continue;
+      this.attempts.set(id, { detail, enrichment: 'enriched' });
+      const e = this.map.get(id);
+      if (e?.enrichment === 'unfetched') this.map.set(id, { ...e, detail, enrichment: 'enriched' });
+    }
+  }
+
+  /** The detail this pool holds for a listing, pooled or not (null if none). */
+  detailOf(id: string): VehicleDetail | null {
+    return this.attempts.get(id)?.detail ?? null;
+  }
+
   /** True if this listing still needs its one detail-page attempt. */
   needsEnrichment(id: string): boolean {
     return this.map.get(id)?.enrichment === 'unfetched';

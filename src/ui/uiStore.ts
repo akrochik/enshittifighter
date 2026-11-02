@@ -19,11 +19,22 @@ export interface UiSnapshot {
   enrichHalted: boolean; // detail fetching stopped itself after repeated failures
   schemaError: boolean; // captured a response but extracted 0 listings (fail loud)
   searchLabel: string; // the current Facebook search text, for the header
+  onMarketplace: boolean; // false after an in-app navigation away from Marketplace -> panel hides
+  onSearchPage: boolean; // the URL is a search (?query=…), so scrolling it feeds the pool
 }
 
 type Listener = () => void;
 
-const EMPTY: UiSnapshot = { listings: [], poolCount: 0, enriching: 0, enrichHalted: false, schemaError: false, searchLabel: '' };
+const EMPTY: UiSnapshot = {
+  listings: [],
+  poolCount: 0,
+  enriching: 0,
+  enrichHalted: false,
+  schemaError: false,
+  searchLabel: '',
+  onMarketplace: true,
+  onSearchPage: false,
+};
 
 export class UiStore {
   private snap: UiSnapshot = EMPTY;
