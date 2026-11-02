@@ -5,46 +5,47 @@
 // Facebook gives us a fairly normalized `marketplace_listing_title`, but it's
 // still messy: "2006 Silverado 2500hd" (no make word), "2007 Chevrolet 2500 HD"
 // (no model word), "...silverado 4x4 2500 diesel truck". So we regex the year /
-// mileage / drivetrain and run a small make/model dictionary with inference.
+// mileage / drivetrain and run the make/model dictionary (vehicleDb) with inference.
 
 import type { ParsedVehicle, Drivetrain, FuelType, ParseConfidence } from './types';
+import { MAKES, MODELS, INFER_MAKE_FROM, PATTERNS, PATTERN_FIRST } from './vehicleDb';
 
-const CURRENT_YEAR = 2026;
 
-// --- make aliases (folded to canonical) ---
-const MAKE_ALIASES: Record<string, string[]> = {
-  chevrolet: ['chevrolet', 'chevy'],
-  gmc: ['gmc'],
-  ford: ['ford'],
-  ram: ['ram', 'dodge'],
-  toyota: ['toyota'],
-  nissan: ['nissan'],
-  honda: ['honda'],
-  jeep: ['jeep'],
-};
+const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// keyword -> regex source where a space/hyphen also matches nothing
+const kwSource = (kw: string): string => escapeRe(kw).replace(/[-\s]+/g, '[-\\s]?');
+const wordRe = (src: string): RegExp => new RegExp(`(?<![a-z0-9])${src}(?![a-z0-9])`);
 
-// --- model families that also imply a make (e.g. "silverado" -> chevrolet) ---
 interface Family {
-  kw: string;
   make: string;
-  weightClass?: boolean; // takes a 1500/2500/3500 class + optional hd
+  model: string;
+  re: RegExp;
+  kwLength: number;
+  weightClass: boolean; // takes a 1500/2500/3500… class + optional hd
 }
-const FAMILIES: Family[] = [
-  { kw: 'silverado', make: 'chevrolet', weightClass: true },
-  { kw: 'sierra', make: 'gmc', weightClass: true },
-  { kw: 'colorado', make: 'chevrolet' },
-  { kw: 'tahoe', make: 'chevrolet' },
-  { kw: 'suburban', make: 'chevrolet' },
-  { kw: 'canyon', make: 'gmc' },
-  { kw: 'tundra', make: 'toyota' },
-  { kw: 'tacoma', make: 'toyota' },
-  { kw: 'titan', make: 'nissan' },
-  { kw: 'frontier', make: 'nissan' },
-  { kw: 'ranger', make: 'ford' },
-  { kw: 'civic', make: 'honda' },
-  { kw: 'accord', make: 'honda' },
-  { kw: 'wrangler', make: 'jeep' },
-];
+const WEIGHT_CLASS_FAMILIES = new Set(['silverado', 'sierra']);
+
+const FAMILIES: Record<string, Family[]> = {};
+for (const [make, entries] of Object.entries(MODELS)) {
+  FAMILIES[make] = entries
+    .map((e): Family => {
+      const [kw, model] = typeof e === 'string' ? [e, e] : e;
+      return { make, model, re: wordRe(kwSource(kw)), kwLength: kw.length, weightClass: WEIGHT_CLASS_FAMILIES.has(model) };
+    })
+    .sort((a, b) => b.kwLength - a.kwLength); // longest first: "grand cherokee" beats "cherokee"
+}
+
+// Inference candidates: allow-listed AND owned by exactly one make.
+const modelOwners = new Map<string, Set<string>>();
+for (const f of Object.values(FAMILIES).flat()) {
+  const owners = modelOwners.get(f.model) ?? new Set<string>();
+  owners.add(f.make);
+  modelOwners.set(f.model, owners);
+}
+const INFERABLE: Family[] = Object.values(FAMILIES)
+  .flat()
+  .filter((f) => INFER_MAKE_FROM.has(f.model) && modelOwners.get(f.model)!.size === 1)
+  .sort((a, b) => b.kwLength - a.kwLength);
 
 // trims, longest-first so "ltz" beats "lt" and "laramie longhorn" beats "laramie"
 const TRIMS: string[] = [
@@ -67,15 +68,22 @@ const BODY_ALIASES: Record<string, string> = {
   'super crew': 'supercrew',
 };
 
-const has = (t: string, kw: string): boolean =>
-  new RegExp(`\\b${kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(t);
+const HAS_CACHE = new Map<string, RegExp>();
+const has = (t: string, kw: string): boolean => {
+  let re = HAS_CACHE.get(kw);
+  if (!re) {
+    re = new RegExp(`\\b${escapeRe(kw)}\\b`);
+    HAS_CACHE.set(kw, re);
+  }
+  return re.test(t);
+};
 
 function extractYear(t: string): number | undefined {
   const m = t.match(/\b(19[0-9]\d|20[0-4]\d)\b/g);
   if (!m) return undefined;
   for (const y of m) {
     const n = Number(y);
-    if (n >= 1900 && n <= CURRENT_YEAR + 1) return n;
+    if (n >= 1900 && n <= new Date().getFullYear() + 1) return n; // next model year is on sale
   }
   return undefined;
 }
@@ -117,23 +125,37 @@ function firstMatch(t: string, list: string[], aliases: Record<string, string>):
   return undefined;
 }
 
+const MAKE_RES: [string, RegExp][] = MAKES.flatMap(([make, aliases]) =>
+  aliases.map((a): [string, RegExp] => [make, new RegExp(`(?<![a-z0-9])${escapeRe(a)}(?![a-z0-9])`)]),
+);
+
+// The make named EARLIEST in the title wins ("2012 Hyundai Genesis" -> hyundai).
 function detectMake(t: string): string | undefined {
-  for (const make of Object.keys(MAKE_ALIASES)) {
-    const aliases = MAKE_ALIASES[make];
-    if (aliases && aliases.some((a) => has(t, a))) return make;
+  let best: string | undefined;
+  let bestAt = Infinity;
+  for (const [make, re] of MAKE_RES) {
+    const m = re.exec(t);
+    if (m && m.index < bestAt) {
+      best = make;
+      bestAt = m.index;
+    }
   }
-  return undefined;
+  // pre-2010 Ram pickups were sold as "Dodge Ram" — fold those into ram,
+  // but leave Dodge's cars (Charger, Durango…) as dodge.
+  if (best === 'dodge' && (/\bram\b/.test(t) || detectWeightClass(t))) return 'ram';
+  return best;
 }
 
-// weight class for pickups: "2500", "2500 hd", "2500hd" -> { cls:"2500", hd:true }
-function detectWeightClass(t: string): { cls: string; hd: boolean } | undefined {
-  // match "2500" even when glued to "hd" ("2500hd") — but not inside a longer
-  // number like "250000" (a comma-less mileage).
-  const m = t.match(/\b([123])500(?!\d)/);
+// Weight class for pickups/chassis cabs: "2500", "2500 hd", "2500hd", "k2500",
+// "3500hd", "5500" -> { cls:"2500", hd:true }. Not inside a longer number like
+// "250000" (a comma-less mileage) and not a mileage itself ("1500 miles").
+const WEIGHT_CLASS = /(?<![a-z0-9])[ck]?([1-6])500(?!\d)(?!\s?(?:miles?|mi|km)\b)/;
+export function detectWeightClass(t: string): { cls: string; hd: boolean } | undefined {
+  const m = t.match(WEIGHT_CLASS);
   if (!m) return undefined;
   const cls = `${m[1]}500`;
   // "hd" may appear at a different occurrence than the first class hit, so scan the whole title.
-  const hd = new RegExp(`\\b${cls}\\s?-?\\s?hd\\b`).test(t);
+  const hd = new RegExp(`(?<!\\d)${cls}\\s?-?\\s?hd\\b`).test(t);
   return { cls, hd };
 }
 
@@ -143,30 +165,40 @@ interface ModelResult {
   modelInferred: boolean;
 }
 
-function detectModel(t: string, make: string | undefined): ModelResult | undefined {
-  // 1) explicit family keyword (also implies a make)
-  const fam = FAMILIES.find((f) => has(t, f.kw));
-  if (fam) {
-    if (fam.weightClass) {
-      const wc = detectWeightClass(t);
-      const model = wc ? `${fam.kw} ${wc.cls}${wc.hd ? 'hd' : ''}` : fam.kw;
-      return { model, makeFromModel: fam.make, modelInferred: false };
-    }
-    return { model: fam.kw, makeFromModel: fam.make, modelInferred: false };
-  }
-
-  // 2) Ford F-series: "f-150", "f250", "f 350"
-  const fseries = t.match(/\bf[-\s]?([123])50\b/);
-  if (fseries) return { model: `f-${fseries[1]}50`, makeFromModel: 'ford', modelInferred: false };
-
-  // 3) bare weight class + a known make -> infer the family model
+function familyModel(fam: Family, t: string): string {
+  if (!fam.weightClass) return fam.model;
   const wc = detectWeightClass(t);
-  if (wc) {
-    const eff = make ?? detectMake(t);
-    if (eff === 'chevrolet') return { model: `silverado ${wc.cls}${wc.hd ? 'hd' : ''}`, modelInferred: true };
-    if (eff === 'gmc') return { model: `sierra ${wc.cls}${wc.hd ? 'hd' : ''}`, modelInferred: true };
-    if (eff === 'ram') return { model: `ram ${wc.cls}${wc.hd ? 'hd' : ''}`, modelInferred: true };
+  return wc ? `${fam.model} ${wc.cls}${wc.hd ? 'hd' : ''}` : fam.model;
+}
+
+function detectModel(t: string, make: string | undefined): ModelResult | undefined {
+  if (make) {
+    // 1) a family keyword of THIS make, or a lineup named by pattern (Mercedes
+    //    "GLK 350", BMW "328i", Audi "Q5", Ford "F-250"); some makes check the pattern first
+    const byKeyword = (): string | undefined => {
+      const fam = (FAMILIES[make] ?? []).find((f) => f.re.test(t));
+      return fam ? familyModel(fam, t) : undefined;
+    };
+    const byPattern = (): string | undefined => PATTERNS[make]?.(t);
+    const model = PATTERN_FIRST.has(make) ? byPattern() ?? byKeyword() : byKeyword() ?? byPattern();
+    if (model) return { model, modelInferred: false };
+
+    // 2) bare weight class + a truck make -> infer the family model
+    const wc = detectWeightClass(t);
+    if (wc) {
+      const hd = wc.hd ? 'hd' : '';
+      if (make === 'chevrolet') return { model: `silverado ${wc.cls}${hd}`, modelInferred: true };
+      if (make === 'gmc') return { model: `sierra ${wc.cls}${hd}`, modelInferred: true };
+      if (make === 'ram') return { model: `ram ${wc.cls}${hd}`, modelInferred: true };
+    }
+    return undefined;
   }
+
+  // No make in the title: only distinctive model names may imply one.
+  const fam = INFERABLE.find((f) => f.re.test(t));
+  if (fam) return { model: familyModel(fam, t), makeFromModel: fam.make, modelInferred: false };
+  const fs = PATTERNS.ford?.(t);
+  if (fs?.startsWith('f-')) return { model: fs, makeFromModel: 'ford', modelInferred: false };
   return undefined;
 }
 
@@ -204,7 +236,7 @@ export function parseVehicleTitle(rawTitle: string): ParsedVehicle {
   if (year !== undefined) v.year = year;
   if (make) v.make = make;
   if (model) v.model = model;
-  if (trimRaw) v.trim = trimRaw;
+  if (trimRaw && trimRaw !== model) v.trim = trimRaw; // Lexus "LS 460": LS is the model, not a trim
   if (bodyStyle) v.bodyStyle = bodyStyle;
   if (mileage !== undefined) v.mileage = mileage;
   if (drivetrain) v.drivetrain = drivetrain;

@@ -16,13 +16,14 @@ export interface UiSnapshot {
   listings: Listing[]; // the raw pool; the panel deal-scores/filters/sorts it
   poolCount: number;
   enriching: number; // detail pages still queued/in-flight
+  enrichHalted: boolean; // detail fetching stopped itself after repeated failures
   schemaError: boolean; // captured a response but extracted 0 listings (fail loud)
   searchLabel: string; // the current Facebook search text, for the header
 }
 
 type Listener = () => void;
 
-const EMPTY: UiSnapshot = { listings: [], poolCount: 0, enriching: 0, schemaError: false, searchLabel: '' };
+const EMPTY: UiSnapshot = { listings: [], poolCount: 0, enriching: 0, enrichHalted: false, schemaError: false, searchLabel: '' };
 
 export class UiStore {
   private snap: UiSnapshot = EMPTY;

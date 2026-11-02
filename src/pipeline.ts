@@ -24,6 +24,9 @@ const base = (kind: PipelineResult['kind']): PipelineResult => ({
 
 export function ingestCapture(pool: Pool, cap: Captured, searchKey: string): PipelineResult {
   const kind = classify(cap.friendlyName);
+  // An HTTP error (rate limit, 5xx) says nothing about the response format — it
+  // must not trip the "Facebook changed its format" banner. Skip it quietly.
+  if (cap.status < 200 || cap.status >= 300) return base('ignore');
 
   if (kind === 'search') {
     const r = extractListings(cap.body, searchKey);

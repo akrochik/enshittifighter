@@ -32,7 +32,9 @@ const ITEM_URL = (id: string) => `https://www.facebook.com/marketplace/item/${id
 
 function toNumber(v: unknown): number | null {
   if (v === null || v === undefined) return null;
-  const n = Number(String(v).replace(/[^0-9.]/g, ''));
+  const cleaned = String(v).replace(/[^0-9.]/g, '');
+  if (!cleaned) return null; // "", "Free", "—" -> unknown, not $0
+  const n = Number(cleaned);
   return Number.isFinite(n) ? n : null;
 }
 
@@ -46,17 +48,20 @@ function inferCurrency(formatted: unknown): string {
   return 'USD'; // "$" and anything unrecognized default to USD (US Marketplace)
 }
 
-/** Parse the mileage subtitle ("385K miles", "177K miles · Dealership"). */
+const KM_TO_MI = 0.621371;
+
+/** Parse the mileage subtitle ("385K miles", "177K miles · Dealership", "120K km"). */
 export function parseMilesText(s: unknown): number | undefined {
   if (typeof s !== 'string') return undefined;
   const t = s.toLowerCase();
-  let m = t.match(/(\d{1,3})\s?k\s*miles?/);
-  if (m?.[1]) return Number(m[1]) * 1000;
-  m = t.match(/(\d{1,3},\d{3})\s*miles?/);
-  if (m?.[1]) return Number(m[1].replace(/,/g, ''));
-  m = t.match(/(\d{4,6})\s*miles?/);
-  if (m?.[1]) return Number(m[1]);
-  return undefined;
+  const m =
+    t.match(/\b(\d{1,3}(?:\.\d)?)\s?k\s*(miles?|km)\b/) ?? // "385k miles", "1.2k miles", "120k km"
+    t.match(/\b(\d{1,3}(?:,\d{3})+|\d{1,7})\s*(miles?|km)\b/); // "170,000 miles", "850 miles"
+  if (!m?.[1]) return undefined;
+  const thousands = /k\s*(?:miles?|km)/.test(m[0]);
+  let n = Number(m[1].replace(/,/g, '')) * (thousands ? 1000 : 1);
+  if (m[2] === 'km') n *= KM_TO_MI;
+  return Math.round(n);
 }
 
 /** Split a (possibly chunked @defer) response into parsed JSON objects. */
@@ -135,7 +140,12 @@ export function extractListings(rawResponseText: string, searchKey: string): Ext
       break;
     }
   }
-  if (!feedUnits) return { listings: [], adUnitsSkipped: 0, schemaMiss: true };
+  if (!feedUnits) {
+    // A GraphQL error reply ({errors:[…]}, no data) is a failed request, not a
+    // changed schema — don't raise the fail-loud banner for it.
+    const errorOnly = chunks.length > 0 && chunks.every((d) => Array.isArray(d?.errors) && !d?.data);
+    return { listings: [], adUnitsSkipped: 0, schemaMiss: !errorOnly };
+  }
 
   const edges = FB.edges(feedUnits) ?? [];
   const listings: Listing[] = [];

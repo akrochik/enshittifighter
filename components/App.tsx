@@ -19,13 +19,23 @@ const FUEL_LABEL: Record<FuelType, string> = { gas: 'Gas', diesel: 'Diesel', hyb
 const TRANS_LABEL: Record<Transmission, string> = { automatic: 'Auto', manual: 'Manual' };
 const DRIVE_LABEL: Record<string, string> = { '4wd': '4x4', awd: 'AWD', '2wd': '2WD', rwd: 'RWD', fwd: 'FWD' };
 const DEAL_LABEL: Record<DealBucket, string> = { great: 'Great deal', good: 'Good deal', fair: 'Fair price', high: 'High price' };
-const UPPER = new Set(['hd', 'ltz', 'lt', 'ls', 'wt', 'gmc', 'awd', 'rst', 'slt', 'sle', 'xlt', 'xl', 'z71', 'sr5', 'fx4', 'trd', 'ram', 'gt']);
+const UPPER = new Set(['hd', 'gmc', 'awd', 'ram', 'gt', 'gle', 'gla', 'cla', 'amg', 'es', 'is', 'gti', 'suv', 'ev', 'sle', 'xle', 'se', 'le', 'ex', 'exl', 'sel', 'sxt']);
 
+// One word (or hyphen part) for display: codes go upper-case ("GLK", "X5", "LTZ",
+// "CR-V"), plain words get a capital ("Silverado", "Mercedes-Benz", "C-Class").
+function casePart(w: string): string {
+  if (!w) return w;
+  if (UPPER.has(w)) return w.toUpperCase();
+  if (/^\d/.test(w)) return w.replace(/hd$/i, 'HD'); // "2500hd", "4runner", "911"
+  if (/^[a-z]{1,3}\d+[a-z]{0,2}$/.test(w)) return w.toUpperCase(); // x5, q7, rs6, xc90, v60
+  if (/^[a-z]{1,3}$/.test(w) && !/[aeiouy]/.test(w)) return w.toUpperCase(); // glk, ltz, rx, mdx
+  return w.charAt(0).toUpperCase() + w.slice(1);
+}
 function titleCase(s?: string): string {
   if (!s) return '';
   return s
     .split(' ')
-    .map((w) => (UPPER.has(w) ? w.toUpperCase() : /^\d/.test(w) ? w.replace(/hd$/i, 'HD') : w.charAt(0).toUpperCase() + w.slice(1)))
+    .map((w) => w.split('-').map(casePart).join('-'))
     .join(' ');
 }
 const fmtMiles = (n?: number): string => (n === undefined ? '' : n >= 1000 ? `${Math.round(n / 1000)}k mi` : `${n} mi`);
@@ -87,7 +97,8 @@ function Toggle({ on, onClick, children }: { on: boolean; onClick: () => void; c
 
 function Card({ l, seen, hidden, onSeen, onToggleHide }: { l: Listing; seen: boolean; hidden: boolean; onSeen: (id: string) => void; onToggleHide: (id: string) => void }) {
   const facets = facetsOf(l);
-  const unparsed = l.vehicle.confidence === 'none';
+  // flag only what's still unknown once the detail page (if fetched) is folded in
+  const unparsed = !effMake(l) || !effModel(l);
   const deal = l.deal;
   const view = (): void => onSeen(l.id);
   return (
@@ -199,7 +210,22 @@ export function App({ store, actions }: { store: UiStore; actions: SiftActions }
   const activePool = useMemo(() => (showHidden ? snap.listings : snap.listings.filter((l) => !hidden.has(l.id))), [snap.listings, hidden, showHidden]);
   const view = useMemo(() => selectView(activePool, filters, sort), [activePool, filters, sort]);
   const makes = useMemo(() => [...new Set(snap.listings.map(effMake).filter((x): x is string => !!x))].sort(), [snap.listings]);
-  const models = useMemo(() => [...new Set(snap.listings.map(effModel).filter((x): x is string => !!x))].sort(), [snap.listings]);
+  // Models follow the make selection: pick Mercedes-Benz, see only its models.
+  // Already-selected models stay listed so they can always be switched off.
+  const models = useMemo(() => {
+    const mk = filters.makes?.length ? new Set(filters.makes) : null;
+    const out = new Set<string>(filters.models ?? []);
+    for (const l of snap.listings) {
+      const model = effModel(l);
+      if (!model) continue;
+      if (mk) {
+        const make = effMake(l);
+        if (!make || !mk.has(make)) continue;
+      }
+      out.add(model);
+    }
+    return [...out].sort();
+  }, [snap.listings, filters.makes, filters.models]);
 
   // Tell the enricher which trucks to fetch first: exactly the ones on screen, in order.
   const viewIds = useMemo(() => view.listings.map((l) => l.id), [view.listings]);
@@ -270,6 +296,11 @@ export function App({ store, actions }: { store: UiStore; actions: SiftActions }
           </div>
         )}
         {snap.enriching > 0 && <div className="enrich">Getting vehicle details… {snap.enriching} to go</div>}
+        {snap.enrichHalted && (
+          <div className="enrich halted" title="Several detail pages in a row failed to load, so fetching stopped. Clear restarts it.">
+            Stopped getting vehicle details — Facebook isn’t answering. Hit <b>Clear</b> to try again later.
+          </div>
+        )}
 
         <div className="sortbar">
           <span className="flabel">Sort</span>

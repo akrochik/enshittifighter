@@ -35,6 +35,7 @@ button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid var(-
 .ctx{padding:9px 14px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--line);background:#12161d}
 .ctx b{color:var(--ink)}
 .enrich{padding:7px 14px;font-size:11.5px;color:var(--accent);background:rgba(39,182,214,.07);border-bottom:1px solid var(--line)}
+.enrich.halted{color:var(--warn);background:rgba(231,169,76,.08)}
 
 .sortbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:9px 14px;border-bottom:1px solid var(--line);background:#12161d}
 .sortbar .flabel{margin-right:2px}
