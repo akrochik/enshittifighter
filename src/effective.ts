@@ -34,7 +34,12 @@ export const effModel = (l: Listing): string | undefined => {
   if (!d?.model) return l.vehicle.model;
   return canonicalDetail(d).model ?? l.vehicle.model ?? d.model;
 };
-export const effTrim = (l: Listing): string | undefined => l.detail?.trim ?? l.vehicle.trim;
+// The detail page's trim name carries the body and bed too ("fx4 pickup 4d 5 1/2 ft",
+// the same shape as FB's normalized titles: "· LTZ Pickup 4D 6 1/2 ft"). Keep the
+// trim itself; a body-only name ("pickup 4d 8 ft") falls back to the title's trim.
+const BODY_SUFFIX = /\s*\b(pickup|sport utility|suv|sedan|coupe|hatchback|wagon|convertible|minivan|van|cab chassis)\b.*$/;
+const cleanTrim = (t: string | undefined): string | undefined => t?.replace(BODY_SUFFIX, '').trim() || undefined;
+export const effTrim = (l: Listing): string | undefined => cleanTrim(l.detail?.trim) ?? l.vehicle.trim;
 export const effBodyStyle = (l: Listing): string | undefined => l.vehicle.bodyStyle;
 export const effDrivetrain = (l: Listing): Drivetrain | undefined => l.vehicle.drivetrain; // title-only
 export const effFuel = (l: Listing): FuelType | undefined => l.detail?.fuel ?? l.vehicle.fuel; // detail authoritative, else title-mined

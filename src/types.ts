@@ -49,8 +49,10 @@ export type EnrichmentStatus = 'unfetched' | 'pending' | 'enriched' | 'failed';
 export type DealBucket = 'great' | 'good' | 'fair' | 'high';
 export interface DealRating {
   bucket: DealBucket;
-  /** $ vs. similar peers in the pool; negative = cheaper than peers. null if too few peers. */
-  delta: number | null;
+  /** $ vs. the median of similar peers in the pool; negative = cheaper than peers. */
+  delta: number;
+  /** delta as a fraction of that median (-0.2 = 20% under) — what "best deals first" sorts by. */
+  ratio: number;
 }
 
 /** The listing type the whole app consumes. */

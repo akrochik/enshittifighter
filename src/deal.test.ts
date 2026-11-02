@@ -73,4 +73,37 @@ describe('withDeals', () => {
     expect(scored.every((l) => l.deal !== null)).toBe(true);
     expect(scored.find((l) => l.id === 't')!.deal!.bucket).toBe('great');
   });
+
+  it('rates each listing exactly as dealFor would (the grouped pass is only faster)', () => {
+    // a deterministic mixed pool: three model classes, some with no model, some
+    // with no price/year/mileage, so every branch of peer matching is exercised
+    const models = ['silverado 2500hd', 'silverado 1500', 'f-150', undefined];
+    const pool: Listing[] = [];
+    for (let i = 0; i < 60; i++) {
+      const model = models[i % 4];
+      pool.push(
+        mkListing({
+          id: `m${i}`,
+          price: i % 11 === 0 ? null : 8000 + ((i * 7919) % 25000),
+          vehicle: {
+            confidence: model ? 'full' : 'none',
+            make: model === 'f-150' ? 'ford' : model ? 'chevrolet' : undefined,
+            model,
+            year: i % 9 === 0 ? undefined : 2008 + (i % 12),
+            mileage: i % 7 === 0 ? undefined : 40_000 + ((i * 104729) % 200_000),
+          },
+        }),
+      );
+    }
+    const scored = withDeals(pool);
+    pool.forEach((l, i) => expect(scored[i]!.deal).toEqual(dealFor(l, pool)));
+    expect(scored.filter((l) => l.deal !== null).length).toBeGreaterThan(10); // the test isn't vacuous
+  });
+
+  it('ratio is the delta as a fraction of the peer median', () => {
+    const t = at2015(12000, 't');
+    const d = dealFor(t, [t, ...peers()])!; // peer median 15000
+    expect(d.delta).toBe(-3000);
+    expect(d.ratio).toBeCloseTo(-0.2);
+  });
 });

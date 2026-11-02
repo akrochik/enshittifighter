@@ -9,8 +9,9 @@ import type { Listing, ExtractResult } from './types';
 // --- Facebook field paths (the only place these strings live) ---
 const FB = {
   searchContainer: (doc: any) => doc?.data?.marketplace_search?.feed_units,
-  edges: (feedUnits: any) => feedUnits?.edges as any[] | undefined,
+  edges: (feedUnits: any) => (Array.isArray(feedUnits?.edges) ? (feedUnits.edges as any[]) : undefined),
   node: (edge: any) => edge?.node,
+  isAdStory: (node: any) => node?.__typename === 'MarketplaceFeedAdStory',
   organicListing: (node: any) => node?.listing, // MarketplaceFeedListingStoryObject
   sponsoredProduct: (node: any) => node?.product_item, // MarketplaceFeedAdStory (may be null)
   id: (l: any) => l?.id,
@@ -28,7 +29,7 @@ const FB = {
   isPending: (l: any) => l?.is_pending,
 } as const;
 
-const ITEM_URL = (id: string) => `https://www.facebook.com/marketplace/item/${id}`;
+const ITEM_URL = (id: string) => `https://www.facebook.com/marketplace/item/${encodeURIComponent(id)}`;
 
 function toNumber(v: unknown): number | null {
   if (v === null || v === undefined) return null;
@@ -109,7 +110,7 @@ function mapListing(node: any, sponsored: boolean, searchKey: string): Listing |
     previousPrice: toNumber(FB.strikeAmount(node)),
     currency: inferCurrency(FB.priceFormatted(node)),
     locationText,
-    photoUrl: typeof photo === 'string' ? photo : null,
+    photoUrl: typeof photo === 'string' && photo.startsWith('https://') ? photo : null,
     listingUrl: ITEM_URL(id),
     sponsored,
     sold: FB.isSold(node) === true,
@@ -127,7 +128,8 @@ function mapListing(node: any, sponsored: boolean, searchKey: string): Listing |
 /**
  * Map a raw Marketplace search response to Listings.
  * - `schemaMiss: true` means we parsed a response but the listing container was
- *   missing (shape changed) — a DIFFERENT state from "found the container, 0 edges".
+ *   missing, or it held results none of which we could read (shape changed) — a
+ *   DIFFERENT state from "found the container, 0 edges".
  */
 export function extractListings(rawResponseText: string, searchKey: string): ExtractResult {
   const chunks = parseChunks(rawResponseText);
@@ -150,24 +152,26 @@ export function extractListings(rawResponseText: string, searchKey: string): Ext
   const edges = FB.edges(feedUnits) ?? [];
   const listings: Listing[] = [];
   let adUnitsSkipped = 0;
+  let unrecognized = 0; // edges that are neither a mappable listing nor a known ad unit
 
   for (const edge of edges) {
     const node = FB.node(edge);
     if (!node) continue;
     const organic = FB.organicListing(node);
-    if (organic) {
-      const l = mapListing(organic, false, searchKey);
+    const product = organic ? null : FB.sponsoredProduct(node);
+    if (organic || product) {
+      const l = mapListing(organic ?? product, !organic, searchKey);
       if (l) listings.push(l);
+      else unrecognized++; // a listing object with no id
       continue;
     }
-    const product = FB.sponsoredProduct(node);
-    if (product) {
-      const l = mapListing(product, true, searchKey);
-      if (l) listings.push(l);
-      continue;
-    }
-    adUnitsSkipped++; // ad unit with no underlying listing (e.g. a pure video ad)
+    if (FB.isAdStory(node)) adUnitsSkipped++; // ad unit with no underlying listing (e.g. a pure video ad)
+    else unrecognized++;
   }
 
-  return { listings, adUnitsSkipped, schemaMiss: false };
+  // Results came back but none of them had the shape we read: if FB renamed
+  // `listing` (or the id), every edge lands here. That's the tool breaking, not an
+  // empty search — fail loud. Some unknown edges alongside real listings are just a
+  // new kind of feed unit and are ignored.
+  return { listings, adUnitsSkipped, schemaMiss: listings.length === 0 && unrecognized > 0 };
 }

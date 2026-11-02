@@ -33,7 +33,10 @@ describe('deriveSearchKey — text query only', () => {
 
 describe('isCaptureMessage', () => {
   it('accepts a well-formed message and rejects noise', () => {
-    expect(isCaptureMessage({ source: MS_SOURCE, type: MS_CAPTURE, payload: { url: 'x' } })).toBe(true);
+    const payload = { transport: 'xhr', url: 'x', friendlyName: 'q', status: 200, body: '{}' };
+    expect(isCaptureMessage({ source: MS_SOURCE, type: MS_CAPTURE, payload })).toBe(true);
+    expect(isCaptureMessage({ source: MS_SOURCE, type: MS_CAPTURE, payload: { url: 'x' } })).toBe(false); // no body
+    expect(isCaptureMessage({ source: MS_SOURCE, type: MS_CAPTURE, payload: { ...payload, body: 42 } })).toBe(false);
     expect(isCaptureMessage({ source: 'other', type: MS_CAPTURE, payload: {} })).toBe(false);
     expect(isCaptureMessage(null)).toBe(false);
     expect(isCaptureMessage({ hello: 1 })).toBe(false);

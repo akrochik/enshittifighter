@@ -29,39 +29,40 @@ function dealKey(l: Listing): string | undefined {
   return make;
 }
 
-/** Prices of pooled listings COMPARABLE to `target`: same model class, proximate year & mileage. */
-function peerPrices(target: Listing, pool: Listing[]): number[] {
-  const tKey = dealKey(target);
-  const ty = effYear(target);
-  const tm = effMileage(target);
+// What peer matching reads from a listing, computed once per listing per pass
+// (the pairwise loop below would otherwise re-derive it n² times).
+interface Facts {
+  id: string;
+  key: string | undefined;
+  year: number | undefined;
+  miles: number | undefined;
+  price: number | null;
+}
+const factsOf = (l: Listing): Facts => ({ id: l.id, key: dealKey(l), year: effYear(l), miles: effMileage(l), price: l.price });
+
+/** Prices of COMPARABLE candidates: same model class, proximate year & mileage. */
+function peerPrices(t: Facts, candidates: Facts[]): number[] {
   const prices: number[] = [];
-  for (const l of pool) {
-    if (l.id === target.id || !isRealPrice(l.price)) continue;
-    const lKey = dealKey(l);
+  for (const c of candidates) {
+    if (c.id === t.id || !isRealPrice(c.price)) continue;
     // a known class is only compared with the same known class — an unrecognized
     // listing could be anything (a G 63 next to a GLK), so it can't be its peer
-    if (tKey && lKey !== tKey) continue;
-    const ly = effYear(l);
-    if (ty !== undefined && ly !== undefined && Math.abs(ly - ty) > 3) continue;
-    const lm = effMileage(l);
-    if (tm !== undefined && lm !== undefined && Math.abs(lm - tm) > Math.max(30_000, tm * 0.3)) continue;
-    prices.push(l.price);
+    if (t.key && c.key !== t.key) continue;
+    if (t.year !== undefined && c.year !== undefined && Math.abs(c.year - t.year) > 3) continue;
+    if (t.miles !== undefined && c.miles !== undefined && Math.abs(c.miles - t.miles) > Math.max(30_000, t.miles * 0.3)) continue;
+    prices.push(c.price);
   }
   return prices;
 }
 
-/**
- * null = can't judge (no real price, or too few comparable listings). That's
- * "unknown", not "fair": the deal filter keeps unknowns visible (never-hide).
- */
-export function dealFor(target: Listing, pool: Listing[]): DealRating | null {
-  if (!isRealPrice(target.price)) return null;
-  const peers = peerPrices(target, pool);
+function rate(t: Facts, candidates: Facts[]): DealRating | null {
+  if (!isRealPrice(t.price)) return null;
+  const peers = peerPrices(t, candidates);
   if (peers.length < MIN_PEERS) return null;
 
   const expected = median(peers);
-  const delta = Math.round(target.price - expected);
-  const ratio = expected > 0 ? (target.price - expected) / expected : 0;
+  const delta = Math.round(t.price - expected);
+  const ratio = expected > 0 ? (t.price - expected) / expected : 0;
 
   let bucket: DealBucket;
   if (ratio <= -0.15) bucket = 'great';
@@ -69,10 +70,31 @@ export function dealFor(target: Listing, pool: Listing[]): DealRating | null {
   else if (ratio < 0.1) bucket = 'fair';
   else bucket = 'high';
 
-  return { bucket, delta };
+  return { bucket, delta, ratio };
+}
+
+/**
+ * null = can't judge (no real price, or too few comparable listings). That's
+ * "unknown", not "fair": the deal filter keeps unknowns visible (never-hide).
+ */
+export function dealFor(target: Listing, pool: Listing[]): DealRating | null {
+  return rate(factsOf(target), pool.map(factsOf));
 }
 
 /** Annotate every listing with its deal rating (recompute whenever the pool changes). */
 export function withDeals(pool: Listing[]): Listing[] {
-  return pool.map((l) => ({ ...l, deal: dealFor(l, pool) }));
+  const facts = pool.map(factsOf);
+  // A listing with a known class can only match its own class, so it only needs
+  // to scan that group; one with no class is compared against everything.
+  const byKey = new Map<string, Facts[]>();
+  for (const f of facts) {
+    if (!f.key) continue;
+    const g = byKey.get(f.key);
+    if (g) g.push(f);
+    else byKey.set(f.key, [f]);
+  }
+  return pool.map((l, i) => {
+    const f = facts[i]!;
+    return { ...l, deal: rate(f, f.key ? byKey.get(f.key)! : facts) };
+  });
 }

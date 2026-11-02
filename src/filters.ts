@@ -104,7 +104,18 @@ export const DEFAULT_SORT: SortField[] = [
   { key: 'newest', dir: 'desc' },
 ];
 
-const DEAL_RANK: Record<DealBucket, number> = { great: 0, good: 1, fair: 2, high: 3 };
+// The orderings the sidebar offers. Each leads with its own key and falls back to
+// the default chain, so ties never collapse into Facebook-style walls.
+export type SortPreset = 'cheapest' | 'priciest' | 'deal' | 'newest' | 'miles' | 'year';
+const tail = (lead: SortKey): SortField[] => DEFAULT_SORT.filter((f) => f.key !== lead);
+export const SORT_PRESETS: Record<SortPreset, SortField[]> = {
+  cheapest: DEFAULT_SORT,
+  priciest: [{ key: 'price', dir: 'desc' }, ...tail('price')],
+  deal: [{ key: 'deal', dir: 'asc' }, ...DEFAULT_SORT], // most under its peers first
+  newest: [{ key: 'newest', dir: 'desc' }, ...tail('newest')],
+  miles: [{ key: 'miles', dir: 'asc' }, ...tail('miles')],
+  year: [{ key: 'year', dir: 'desc' }, ...tail('year')],
+};
 
 function keyValue(l: Listing, key: SortKey): number | undefined {
   switch (key) {
@@ -117,7 +128,7 @@ function keyValue(l: Listing, key: SortKey): number | undefined {
     case 'newest':
       return l.createdAt ?? undefined;
     case 'deal':
-      return l.deal ? DEAL_RANK[l.deal.bucket] : undefined;
+      return l.deal?.ratio; // unrated (too few peers) sorts last
   }
 }
 

@@ -18,7 +18,18 @@ export interface CaptureMessage {
   payload: Captured;
 }
 
+// Any script on the page can postMessage, so check the fields the relay reads,
+// not just the envelope — a malformed payload must be dropped, never thrown on.
 export function isCaptureMessage(data: unknown): data is CaptureMessage {
   const d = data as CaptureMessage | undefined;
-  return !!d && d.source === MS_SOURCE && d.type === MS_CAPTURE && !!d.payload;
+  const p = d?.payload;
+  return (
+    !!d &&
+    d.source === MS_SOURCE &&
+    d.type === MS_CAPTURE &&
+    !!p &&
+    typeof p.body === 'string' &&
+    typeof p.friendlyName === 'string' &&
+    typeof p.status === 'number'
+  );
 }

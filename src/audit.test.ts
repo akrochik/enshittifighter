@@ -31,6 +31,36 @@ describe('adapter', () => {
     expect(extractListings(JSON.stringify({ data: { something_else: {} } }), 'q').schemaMiss).toBe(true);
   });
 
+  const edges = (nodes: unknown[]): string =>
+    JSON.stringify({ data: { marketplace_search: { feed_units: { edges: nodes.map((node) => ({ node })) } } } });
+
+  it('results whose listing field was renamed are a schema miss, not ad units', () => {
+    const r = extractListings(edges([{ __typename: 'MarketplaceFeedListingStoryObject', listing_v2: { id: '1' } }]), 'q');
+    expect(r.schemaMiss).toBe(true);
+    expect(r.adUnitsSkipped).toBe(0);
+  });
+
+  it('a page of only product-less ad units is empty, not broken', () => {
+    const r = extractListings(edges([{ __typename: 'MarketplaceFeedAdStory', product_item: null }]), 'q');
+    expect(r).toMatchObject({ listings: [], adUnitsSkipped: 1, schemaMiss: false });
+  });
+
+  it('an unknown feed unit next to real listings is ignored', () => {
+    const r = extractListings(edges([{ listing: { id: '1', marketplace_listing_title: 'x' } }, { __typename: 'SomethingNew' }]), 'q');
+    expect(r.schemaMiss).toBe(false);
+    expect(r.listings).toHaveLength(1);
+  });
+
+  it('a non-array edges field is a schema miss, never a throw', () => {
+    const raw = JSON.stringify({ data: { marketplace_search: { feed_units: { edges: { 0: {} } } } } });
+    expect(extractListings(raw, 'q').schemaMiss).toBe(true);
+  });
+
+  it('only https photo URLs are kept', () => {
+    const r = extractListings(feed({ id: '1', primary_listing_photo: { image: { uri: 'javascript:alert(1)' } } }), 'q');
+    expect(r.listings[0]!.photoUrl).toBeNull();
+  });
+
   it.each<[string, number | undefined]>([
     ['385K miles', 385000],
     ['177K miles · Dealership', 177000],
